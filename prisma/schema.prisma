@@ -1,0 +1,227 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ──────────────────────────────────────────
+// 运单本地快照表（V3 自有，只读缓存）
+// ──────────────────────────────────────────
+model WaybillSnapshot {
+  id              String   @id @default(cuid())
+  v2OrderId       String   @unique
+  externalCode    String?
+  receiverStore   String?
+  receiverName    String?
+  receiverPhone   String?
+  receiverAddress String?
+  totalAmount     Decimal  @default(0)
+  skuSummary      String?  // SKU 明细 JSON: [{skuCode, skuName, qty, spec}]
+  status          String   @default("active")
+  lastSyncedAt    DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tickets         Ticket[]
+  scanRecords     ScanRecord[]
+}
+
+// ──────────────────────────────────────────
+// 接口同步日志表
+// ──────────────────────────────────────────
+model SyncLog {
+  id          String   @id @default(cuid())
+  requestId   String   @unique
+  endpoint    String
+  params      String?
+  statusCode  Int?
+  durationMs  Int?
+  success     Boolean
+  errorMsg    String?
+  createdAt   DateTime @default(now())
+}
+
+// ──────────────────────────────────────────
+// 异常工单表
+// ──────────────────────────────────────────
+model Ticket {
+  id              String   @id @default(cuid())
+  ticketNo        String   @unique
+
+  source          String   // scan_auto | manual_report
+  anomalyType     String   // lost|damaged|rejected|timeout|wrong_address|qty_mismatch|appearance_damage|spec_error|label_error|batch_error
+  severity        String   // low|medium|high|critical
+
+  waybillId       String
+  waybill         WaybillSnapshot @relation(fields: [waybillId], references: [id])
+  scanRecordId    String?
+
+  status          String   @default("pending_approval")
+  // pending_approval → level1_approving → [level2_approving] → executing → completed
+  //                                                         → rejected → resubmitted
+  //                                                         → timeout_auto_rejected
+  //                                                         → fast_released
+
+  currentLevel    Int      @default(1)
+  rejectCount     Int      @default(0)
+  maxRejectCount  Int      @default(3)
+
+  estimatedAmount Decimal  @default(0)
+  actualAmount    Decimal?
+
+  description     String?
+  reporterId      String
+  reporterName    String?
+
+  timeoutAt       DateTime?
+  completedAt     DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  approvals       ApprovalRecord[]
+  payments        PaymentRecord[]
+  scanRecords     ScanRecord[]
+}
+
+// ──────────────────────────────────────────
+// 审批记录表
+// ──────────────────────────────────────────
+model ApprovalRecord {
+  id           String   @id @default(cuid())
+  ticketId     String
+  ticket       Ticket   @relation(fields: [ticketId], references: [id])
+
+  level        Int
+  approverId   String
+  approverName String
+  action       String   // approved | rejected | fast_release | reassign
+  comment      String?
+
+  version      Int      @default(1)
+  token        String?
+
+  createdAt    DateTime @default(now())
+
+  @@unique([ticketId, token])
+}
+
+// ──────────────────────────────────────────
+// 赔付记录表
+// ──────────────────────────────────────────
+model PaymentRecord {
+  id               String   @id @default(cuid())
+  ticketId         String
+  ticket           Ticket   @relation(fields: [ticketId], references: [id])
+  approvalRecordId String?
+
+  amount           Decimal
+  direction        String   // to_customer | from_supplier
+  status           String   @default("pending") // pending | completed | failed
+  settlementMethod String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────
+// 库存表
+// ──────────────────────────────────────────
+model Inventory {
+  id           String   @id @default(cuid())
+  skuCode      String   @unique
+  skuName      String?
+  totalQty     Int      @default(0)
+  lockedQty    Int      @default(0)
+  availableQty Int      @default(0)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model InventoryLog {
+  id          String   @id @default(cuid())
+  skuCode     String
+  changeType  String   // deduction | return_in | lock | unlock
+  qty         Int
+  relatedId   String?
+  relatedType String?  // ticket | approval | payment
+  remark      String?
+  createdAt   DateTime @default(now())
+}
+
+// ──────────────────────────────────────────
+// 扫描记录表
+// ──────────────────────────────────────────
+model ScanRecord {
+  id           String   @id @default(cuid())
+  waybillId    String
+  waybill      WaybillSnapshot @relation(fields: [waybillId], references: [id])
+  skuCode      String
+  skuName      String?
+  scanTime     DateTime @default(now())
+  operatorId   String
+  operatorName String?
+
+  qcResult     String   // pass | anomaly
+  hitRuleId    String?
+  hitRuleDesc  String?
+  anomalyDesc  String?
+
+  batchStatus  String   @default("normal") // normal | locked | unlocked
+
+  ticketId     String?
+  ticket       Ticket?  @relation(fields: [ticketId], references: [id])
+
+  createdAt    DateTime @default(now())
+}
+
+// ──────────────────────────────────────────
+// 品控规则表（可配置，不硬编码）
+// ──────────────────────────────────────────
+model QcRule {
+  id               String   @id @default(cuid())
+  name             String
+  anomalySubtype   String   // qty_mismatch | appearance_damage | spec_error | label_error | batch_error
+  condition        String   // JSON: {field, operator, threshold}
+  severity         String   // low|medium|high|critical
+  autoCreateTicket Boolean  @default(true)
+  autoLevel        Int      @default(1)
+  enabled          Boolean  @default(true)
+  description      String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────
+// 审批级别配置表（可配置的分级规则）
+// ──────────────────────────────────────────
+model ApprovalLevelConfig {
+  id               String   @id @default(cuid())
+  level            Int
+  minAmount        Decimal
+  maxAmount        Decimal?  // null = 无上限
+  timeoutHours     Int
+  escalationAction String   @default("escalate")
+  enabled          Boolean  @default(true)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────
+// 用户/角色表（简化内置）
+// ──────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  name      String
+  role      String   // reporter | level1_approver | level2_approver | qc_supervisor | admin
+  warehouse String?
+  enabled   Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+}

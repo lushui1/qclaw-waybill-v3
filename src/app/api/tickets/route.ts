@@ -1,0 +1,186 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/db';
+import { TicketStateMachine, isActionable, isTerminalStatus } from '@/lib/ticket-state-machine';
+import { verifyWaybill } from '@/lib/v2-client';
+
+// GET: 工单列表（支持筛选/分页）
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const status = searchParams.get('status');
+    const anomalyType = searchParams.get('anomalyType');
+    const source = searchParams.get('source');
+    const keyword = searchParams.get('keyword');
+    const searchId = searchParams.get('searchId');
+
+    // 如果提供了 searchId，查看完整详情
+    if (searchId) {
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: searchId },
+        include: {
+          waybill: true,
+          approvals: { orderBy: { createdAt: 'desc' } },
+          payments: true,
+          scanRecords: true,
+        },
+      });
+      if (!ticket) return NextResponse.json({ error: '工单不存在' }, { status: 404 });
+      return NextResponse.json(ticket);
+    }
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (anomalyType) where.anomalyType = anomalyType;
+    if (source) where.source = source;
+    if (keyword) {
+      where.OR = [
+        { ticketNo: { contains: keyword } },
+        { reporterName: { contains: keyword } },
+        { description: { contains: keyword } },
+      ];
+    }
+
+    const [tickets, total] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        include: {
+          waybill: { select: { externalCode: true, receiverName: true } },
+          _count: { select: { approvals: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.ticket.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      tickets,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// POST: 创建工单（手工上报）
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { waybillId, anomalyType, description, amount, reporterId, reporterName, severity } = body;
+
+    if (!waybillId || !anomalyType) {
+      return NextResponse.json({ error: '缺少必要参数: waybillId, anomalyType' }, { status: 400 });
+    }
+
+    // 1. 校验运单存在性（实时调 V2 接口）
+    const waybill = await prisma.waybillSnapshot.findUnique({ where: { id: waybillId } });
+    if (!waybill) {
+      return NextResponse.json({ error: '运单不存在，请先同步运单数据' }, { status: 404 });
+    }
+
+    // 实时调用 V2 接口校验
+    const v2Result = await verifyWaybill(waybill.v2OrderId);
+    if (!v2Result.success) {
+      return NextResponse.json({
+        error: `V2 接口校验失败: ${v2Result.error}`,
+        requestId: v2Result.requestId,
+        hint: v2Result.statusCode === 404 ? '该运单在 V2 系统中已不存在' : 'V2 服务暂时不可用，请稍后重试',
+        useLocalFallback: true,
+      }, { status: v2Result.statusCode === 404 ? 404 : 502 });
+    }
+
+    // 2. 检查同类型未关闭工单（同类型不可重复上报）
+    const existingTicket = await prisma.ticket.findFirst({
+      where: {
+        waybillId,
+        anomalyType,
+        status: { notIn: ['completed', 'fast_released', 'timeout_auto_rejected'] },
+      },
+    });
+    if (existingTicket) {
+      return NextResponse.json({
+        error: `该运单已有同类型未关闭的异常工单: ${existingTicket.ticketNo}`,
+        existingTicketId: existingTicket.id,
+      }, { status: 409 });
+    }
+
+    // 3. 生成工单号
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const count = await prisma.ticket.count();
+    const ticketNo = `TKT-${today}-${String(count + 1).padStart(4, '0')}`;
+
+    // 4. 计算超时时间（一级审批）
+    const configs = await prisma.approvalLevelConfig.findMany({ where: { enabled: true } });
+    const level1Cfg = configs.find(c => c.level === 1);
+    const timeoutHours = level1Cfg?.timeoutHours ?? 24;
+    const timeoutAt = new Date(Date.now() + timeoutHours * 60 * 60 * 1000);
+
+    // 5. 创建工单
+    const ticket = await prisma.ticket.create({
+      data: {
+        ticketNo,
+        source: 'manual_report',
+        anomalyType,
+        severity: severity || 'medium',
+        waybillId,
+        status: 'pending_approval',
+        currentLevel: 1,
+        estimatedAmount: amount ? Math.round(Number(amount) * 100) : 0,
+        description,
+        reporterId,
+        reporterName,
+        timeoutAt,
+      },
+    });
+
+    return NextResponse.json(ticket, { status: 201 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// PATCH: 批量更新工单状态（如超时自动驳回）
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { action, ticketIds } = body;
+
+    if (action === 'check_timeouts') {
+      // 检查超时工单
+      const now = new Date();
+      const expiredTickets = await prisma.ticket.findMany({
+        where: {
+          status: { in: ['pending_approval', 'level1_approving', 'level2_approving'] },
+          timeoutAt: { lte: now },
+        },
+      });
+
+      let updated = 0;
+      for (const t of expiredTickets) {
+        const machine = new TicketStateMachine(t.status as any);
+        if (machine.canTransition('timeout_auto_rejected')) {
+          await prisma.ticket.update({
+            where: { id: t.id },
+            data: {
+              status: 'timeout_auto_rejected',
+              updatedAt: now,
+            },
+          });
+          updated++;
+        }
+      }
+
+      return NextResponse.json({ checked: expiredTickets.length, autoRejected: updated });
+    }
+
+    return NextResponse.json({ error: '未知操作' }, { status: 400 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
