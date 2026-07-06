@@ -20,12 +20,16 @@ export default function ApprovalPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     fetch('/api/users').then(r => r.json()).then(users => {
-      if (users.length > 0) setCurrentUser(users[0]);
+      setAllUsers(users);
+      const saved = localStorage.getItem('currentUser');
+      const found = saved ? users.find((u: any) => u.id === saved) : null;
+      setCurrentUser(found || users[0] || null);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
@@ -52,9 +56,20 @@ export default function ApprovalPage() {
         <div>
           <div className="page-title">✅ 我的审批</div>
           <div className="page-subtitle">
-            {currentUser ? `${currentUser.name} · ${currentUser.role}` : '请先配置用户'} · 待处理 {total} 条
+            {currentUser ? `${currentUser.name} · ${currentUser.role}` : '请先选择角色'} · 待处理 {total} 条
           </div>
         </div>
+        <select className="input" value={currentUser?.id || ''}
+          onChange={e => {
+            const u = allUsers.find(x => x.id === e.target.value);
+            if (u) { setCurrentUser(u); localStorage.setItem('currentUser', u.id); }
+          }}
+          style={{ maxWidth: 200, fontSize: 13 }}>
+          <option value="">切换角色</option>
+          {allUsers.map((u: any) => (
+            <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+          ))}
+        </select>
       </div>
 
       {/* 统计行 */}
