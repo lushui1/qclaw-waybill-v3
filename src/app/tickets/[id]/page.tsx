@@ -123,8 +123,13 @@ export default function TicketDetailPage() {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>加载中...</div>;
   if (!ticket) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--error)' }}>工单不存在</div>;
 
-  const canApprove = ['pending_approval', 'level1_approving', 'level2_approving'].includes(ticket.status);
-  const canFastRelease = ticket.source === 'scan_auto' && canApprove;
+  const canApprove = currentUser && ['pending_approval', 'level1_approving', 'level2_approving'].includes(ticket.status);
+  const canOperate = canApprove && (
+    currentUser.role === 'admin' ||
+    (ticket.currentLevel === 1 && ['level1_approver', 'admin'].includes(currentUser.role)) ||
+    (ticket.currentLevel === 2 && ['level2_approver', 'admin'].includes(currentUser.role))
+  );
+  const showFastRelease = canApprove && ticket.source === 'scan_auto' && currentUser?.role === 'qc_supervisor';
   const isAdmin = currentUser?.role === 'admin';
 
   const handleReassign = async () => {
@@ -207,7 +212,7 @@ export default function TicketDetailPage() {
       </div>
 
       {/* 审批操作 */}
-      {canApprove && (
+      {canOperate && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-title">审批操作</div>
           <div style={{ marginBottom: 12 }}>
@@ -225,7 +230,7 @@ export default function TicketDetailPage() {
             <button className="btn btn-danger" onClick={handleReject} disabled={!!actionLoading || !comment}>
               {actionLoading === 'reject' ? '处理中...' : '❌ 拒绝'}
             </button>
-            {canFastRelease && currentUser?.role === 'qc_supervisor' && (
+            {showFastRelease && (
               <button className="btn" onClick={handleFastRelease} disabled={!!actionLoading || !comment}>
                 {actionLoading === 'fast_release' ? '处理中...' : '⚡ 快速放行'}
               </button>
