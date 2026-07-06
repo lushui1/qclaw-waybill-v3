@@ -13,8 +13,8 @@ export async function POST(
     const body = await req.json();
     const { approverId, approverName, approverRole, comment } = body;
 
-    if (!approverId || !approverRole) {
-      return NextResponse.json({ error: '缺少审批人信息' }, { status: 400 });
+    if (!approverId || !approverRole || !approverName) {
+      return NextResponse.json({ error: '缺少审批人信息（id, name, role）' }, { status: 400 });
     }
 
     const ticket = await prisma.ticket.findUnique({ where: { id } });

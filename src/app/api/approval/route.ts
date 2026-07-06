@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { handleGetError } from '@/lib/api-error-handler';
 
 // GET: 获取待审批工单列表
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20'), 100);
     const approverId = searchParams.get('approverId');
     const approverRole = searchParams.get('approverRole');
 
@@ -60,6 +61,6 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'GET /api/approval');
   }
 }

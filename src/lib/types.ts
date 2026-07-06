@@ -59,6 +59,14 @@ export const QC_ANOMALY_ACTIONS: Record<
   batch_error:        { actions: ['return_to_supplier', 'supplier_compensation'], needsPayment: true, direction: 'from_supplier' },
 };
 
+/** 严重度枚举权重（用于排序：值越大越严重） */
+export const SEVERITY_ORDER: Record<string, number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};
+
 /** 异常类型分组 */
 export const isLogisticsAnomaly = (type: string): boolean =>
   ['lost', 'damaged', 'rejected', 'timeout', 'wrong_address'].includes(type);

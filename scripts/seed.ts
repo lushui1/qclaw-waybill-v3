@@ -45,11 +45,13 @@ async function main() {
   ];
 
   for (const c of levelConfigs) {
-    await prisma.approvalLevelConfig.upsert({
-      where: { id: `level-${c.level}` },
-      update: c,
-      create: { ...c, id: `level-${c.level}` },
-    });
+    // 使用 level 字段 upsert（@@unique([level]) 约束）
+    const existing = await prisma.approvalLevelConfig.findFirst({ where: { level: c.level } });
+    if (existing) {
+      await prisma.approvalLevelConfig.update({ where: { id: existing.id }, data: c });
+    } else {
+      await prisma.approvalLevelConfig.create({ data: c });
+    }
   }
   console.log('✅ 已创建审批级别配置');
 

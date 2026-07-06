@@ -71,5 +71,5 @@ export function isTerminalStatus(status: TicketStatus): boolean {
 
 /** 检查工单是否可被操作 */
 export function isActionable(status: TicketStatus): boolean {
-  return ['level1_approving', 'level2_approving'].includes(status);
+  return ['pending_approval', 'level1_approving', 'level2_approving'].includes(status);
 }

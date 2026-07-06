@@ -6,6 +6,7 @@
  */
 
 import { prisma } from './db';
+import { SEVERITY_ORDER } from './types';
 
 interface QcCheckResult {
   passed: boolean;
@@ -25,8 +26,9 @@ export async function executeQcCheck(
 ): Promise<QcCheckResult> {
   const rules = await prisma.qcRule.findMany({
     where: { enabled: true },
-    orderBy: { severity: 'desc' },
   });
+  // 按严重度权重排序（critical > high > medium > low），同级别按创建时间倒序
+  rules.sort((a, b) => (SEVERITY_ORDER[b.severity] || 0) - (SEVERITY_ORDER[a.severity] || 0) || b.createdAt.getTime() - a.createdAt.getTime());
 
   if (rules.length === 0) {
     return { passed: true, description: '未配置品控规则，默认通过' };
@@ -102,7 +104,8 @@ interface Condition {
 function parseCondition(conditionJson: string): Condition | null {
   try {
     return JSON.parse(conditionJson) as Condition;
-  } catch {
+  } catch (e) {
+    console.warn(`[QCEngine] 品控规则条件解析失败: "${conditionJson}"`, e);
     return null;
   }
 }

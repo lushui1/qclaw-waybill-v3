@@ -4,10 +4,15 @@ import { prisma } from './db';
 // V2 HTTP API 客户端
 // ──────────────────────────────────────────
 
-const V2_BASE = process.env.V2_API_BASE_URL || 'http://localhost:3000';
+const V2_BASE = process.env.V2_API_BASE_URL || 'https://ideakaoshi.vercel.app';
+const V2_BASE_FALLBACK = process.env.V2_API_BASE_URL_FALLBACK || '';
 const V2_API_KEY = process.env.V2_API_KEY || '';
 const TIMEOUT_MS = 5000;
 const MAX_RETRIES = 2;
+
+// 简单缓存：key=endpoint, value=上次成功响应
+const responseCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
 
 interface V2OrderResponse {
   id: string;
@@ -16,6 +21,7 @@ interface V2OrderResponse {
   receiverName: string | null;
   receiverPhone: string | null;
   receiverAddress: string | null;
+  totalAmount: number;
   skuCode: string;
   skuName: string;
   skuQuantity: string;
@@ -30,6 +36,7 @@ interface V2ApiResult<T> {
   statusCode?: number;
   requestId: string;
   durationMs: number;
+  fromCache?: boolean; // 是否来自缓存
 }
 
 /** 生成 Request ID 用于链路追踪 */
@@ -51,78 +58,93 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
-/** 核心请求函数：自动重试 + Request ID 追踪 + 日志记录 */
+/** 核心请求函数：自动重试 + Request ID 追踪 + 日志记录 + 降级 */
 async function request<T>(
   endpoint: string,
-  options: { method?: string; params?: Record<string, string> } = {}
+  options: { method?: string; params?: Record<string, string>; baseUrl?: string } = {}
 ): Promise<V2ApiResult<T>> {
   const requestId = generateRequestId();
   const startTime = Date.now();
   const { method = 'GET', params } = options;
-
-  // 构建 URL
-  const url = new URL(`${V2_BASE}/api${endpoint}`);
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  }
+  const bases = options.baseUrl ? [options.baseUrl] : [V2_BASE, V2_BASE_FALLBACK];
 
   let lastError: string | undefined;
   let lastStatusCode: number | undefined;
 
-  // 重试循环
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetchWithTimeout(
-        url.toString(),
-        {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': V2_API_KEY,
-            'X-Request-ID': requestId,
+  // 逐个 base URL 尝试（主 URL → 备用 URL）
+  for (const base of bases) {
+    const url = new URL(`${base}/api${endpoint}`);
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    }
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetchWithTimeout(
+          url.toString(),
+          {
+            method,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': V2_API_KEY,
+              'X-Request-ID': requestId,
+            },
           },
-        },
-        TIMEOUT_MS
-      );
+          TIMEOUT_MS
+        );
 
-      lastStatusCode = response.status;
+        lastStatusCode = response.status;
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        lastError = `V2 API ${response.status}: ${errorText.substring(0, 200)}`;
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => 'Unknown error');
+          lastError = `V2 API ${response.status}: ${errorText.substring(0, 200)}`;
 
-        // 4xx 不重试（客户端错误）
-        if (response.status >= 400 && response.status < 500) {
-          break;
+          // 4xx 不重试，切到下一个 base URL
+          if (response.status >= 400 && response.status < 500) {
+            break; // 跳出内层重试循环，外层切到备用 URL
+          }
+          // 5xx 继续重试
+          continue;
         }
-        // 5xx 重试
-        continue;
+
+        const data = await response.json();
+        const durationMs = Date.now() - startTime;
+
+        // 写入成功缓存
+        responseCache.set(`${method}:${endpoint}`, { data, timestamp: Date.now() });
+
+        logSync(requestId, endpoint, params, response.status, durationMs, true).catch(() => {});
+
+        return { success: true, data: data as T, requestId, durationMs, statusCode: response.status };
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          lastError = `请求超时 (${TIMEOUT_MS}ms)`;
+        } else {
+          lastError = err.message || String(err);
+        }
+        if (attempt >= MAX_RETRIES) break; // 重试耗尽，切到备用 URL
+        await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
       }
-
-      const data = await response.json();
-      const durationMs = Date.now() - startTime;
-
-      // 记录成功日志
-      await logSync(requestId, endpoint, params, response.status, durationMs, true);
-
-      return { success: true, data: data as T, requestId, durationMs, statusCode: response.status };
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        lastError = `请求超时 (${TIMEOUT_MS}ms)`;
-      } else {
-        lastError = err.message || String(err);
-      }
-      // 最后一次尝试也失败，跳出循环
-      if (attempt >= MAX_RETRIES) break;
-      // 指数退避：1s, 2s
-      await new Promise(r => setTimeout(r, (attempt + 1) * 1000));
     }
   }
 
   const durationMs = Date.now() - startTime;
 
-  // 记录失败日志
-  await logSync(requestId, endpoint, params, lastStatusCode, durationMs, false, lastError);
+  logSync(requestId, endpoint, params, lastStatusCode, durationMs, false, lastError).catch(() => {});
+
+  // 失败时尝试返回缓存数据
+  const cacheKey = `${method}:${endpoint}`;
+  const cached = responseCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL_MS) {
+    return {
+      success: true,
+      data: cached.data as T,
+      requestId,
+      durationMs,
+      statusCode: 200,
+      fromCache: true,
+    };
+  }
 
   return {
     success: false,
@@ -183,10 +205,32 @@ export async function syncWaybills(page: number = 1, pageSize: number = 50, stat
   return await request<{ orders: V2OrderResponse[]; total: number }>('/v2/orders', { params });
 }
 
-/** (可选) 回写异常状态到 V2 */
-export async function writebackAnomalyStatus(v2OrderId: string, status: string, ticketNo: string) {
-  return await request<{ success: boolean }>(`/v2/orders/${v2OrderId}/anomaly-status`, {
-    method: 'POST',
-    params: { status, ticketNo },
-  });
+/** (可选) 回写异常状态到 V2 — POST body 方式 */
+export async function writebackAnomalyStatus(v2OrderId: string, status: string, ticketNo: string, anomalyType?: string) {
+  // 使用自定义 fetch 发送 POST JSON body，不走 request() 的 params 方式
+  const requestId = generateRequestId();
+  const startTime = Date.now();
+  try {
+    const res = await fetchWithTimeout(
+      `${V2_BASE}/api/v2/orders/${v2OrderId}/anomaly-status`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': V2_API_KEY,
+          'X-Request-ID': requestId,
+        },
+        body: JSON.stringify({ status, ticketNo, anomalyType }),
+      },
+      TIMEOUT_MS
+    );
+    const durationMs = Date.now() - startTime;
+    const data = res.ok ? await res.json() : null;
+    logSync(requestId, `/v2/orders/${v2OrderId}/anomaly-status`, { status, ticketNo }, res.status, durationMs, res.ok, res.ok ? undefined : await res.text().catch(() => '')).catch(() => {});
+    return { success: res.ok, data, requestId, durationMs, statusCode: res.status };
+  } catch (err: any) {
+    const durationMs = Date.now() - startTime;
+    logSync(requestId, `/v2/orders/${v2OrderId}/anomaly-status`, { status, ticketNo }, undefined, durationMs, false, err.message).catch(() => {});
+    return { success: false, error: err.message, requestId, durationMs };
+  }
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { TicketStateMachine, isActionable } from '@/lib/ticket-state-machine';
-import { getApprovalConfigs, canApproveLevel, canSelfApprove, generateOperationToken, getTimeoutHours } from '@/lib/approval-engine';
+import { getApprovalConfigs, canApproveLevel, canSelfApprove, generateOperationToken, getTimeoutHours, getLevel1MaxAmount } from '@/lib/approval-engine';
 import { executeLinks } from '@/lib/execution-links';
 
 // POST /api/tickets/[id]/approve
@@ -14,8 +14,8 @@ export async function POST(
     const body = await req.json();
     const { approverId, approverName, approverRole, comment, amount } = body;
 
-    if (!approverId || !approverRole) {
-      return NextResponse.json({ error: '缺少审批人信息' }, { status: 400 });
+    if (!approverId || !approverRole || !approverName) {
+      return NextResponse.json({ error: '缺少审批人信息（id, name, role）' }, { status: 400 });
     }
 
     // 1. 获取工单（带乐观锁 version）
@@ -47,20 +47,13 @@ export async function POST(
     const token = generateOperationToken();
     const machine = new TicketStateMachine(ticket.status as any);
 
-    // 6. 判断下一状态
-    const configs = await getApprovalConfigs();
-    const level1Cfg = configs.find(c => c.level === 1);
-    const level1MaxAmount = level1Cfg ? Number(level1Cfg.maxAmount ?? 5000) : 5000;
-
-    let nextStatus: string;
-    let nextLevel = ticket.currentLevel;
-
-    if (ticket.currentLevel === 1 && (Number(amount ?? ticket.estimatedAmount) > level1MaxAmount)) {
-      nextStatus = 'level2_approving';
-      nextLevel = 2;
-    } else {
-      nextStatus = 'executing';
-    }
+    // 6. 判断下一状态（使用状态机静态方法，消除重复逻辑）
+    const level1MaxAmount = await getLevel1MaxAmount();
+    const { nextStatus, nextLevel } = TicketStateMachine.approveTransition(
+      Number(amount ?? ticket.estimatedAmount),
+      ticket.currentLevel,
+      { level1MaxAmount }
+    );
 
     if (!machine.canTransition(nextStatus as any)) {
       return NextResponse.json({ error: `无法从 ${ticket.status} 过渡到 ${nextStatus}` }, { status: 409 });
@@ -113,12 +106,8 @@ export async function POST(
       // 如果进入 executing 状态，触发执行联动（赔付+库存）
       let executionResult = null;
       if (nextStatus === 'executing') {
-        try {
-          executionResult = await executeLinks(id, approval.id, amount ? Math.round(Number(amount) * 100) : undefined);
-        } catch (linkErr: any) {
-          // 执行联动失败不阻塞审批完成，但记录错误
-          console.error('执行联动失败:', linkErr.message);
-        }
+        // 联动失败会触发事务回滚，保证审批 + 联动一致性
+        executionResult = await executeLinks(id, approval.id, amount ? Math.round(Number(amount) * 100) : undefined);
       }
 
       return { approval, ticket: updated, executionResult };

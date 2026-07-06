@@ -103,6 +103,8 @@ model ApprovalRecord {
   version      Int      @default(1)
   token        String?
 
+  payments     PaymentRecord[]
+
   createdAt    DateTime @default(now())
 
   @@unique([ticketId, token])
@@ -116,6 +118,7 @@ model PaymentRecord {
   ticketId         String
   ticket           Ticket   @relation(fields: [ticketId], references: [id])
   approvalRecordId String?
+  approvalRecord   ApprovalRecord? @relation(fields: [approvalRecordId], references: [id])
 
   amount           Decimal
   direction        String   // to_customer | from_supplier
@@ -210,6 +213,8 @@ model ApprovalLevelConfig {
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@unique([level])
 }
 
 // ──────────────────────────────────────────

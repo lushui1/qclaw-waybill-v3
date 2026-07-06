@@ -5,7 +5,7 @@
  */
 
 import { prisma } from './db';
-import { isLogisticsAnomaly, isQcAnomaly, LOGISTICS_ANOMALY_ACTIONS, QC_ANOMALY_ACTIONS, PaymentDirection } from './types';
+import { isLogisticsAnomaly, isQcAnomaly, LOGISTICS_ANOMALY_ACTIONS, QC_ANOMALY_ACTIONS, PaymentDirection, SEVERITY_ORDER } from './types';
 
 export interface ExecutionResult {
   paymentCreated: boolean;
@@ -86,14 +86,15 @@ export async function executeLinks(
       let inventory = await tx.inventory.findUnique({ where: { skuCode } });
 
       if (!inventory) {
-        // 库存不存在则创建（简化处理）
+        // 库存不存在则创建（按实际数量初始化，避免魔数）
+        const initQty = Math.max(skuQty, 10); // 至少 10 件
         inventory = await tx.inventory.create({
           data: {
             skuCode,
             skuName: skuCode,
-            totalQty: skuQty || 100,
+            totalQty: initQty,
             lockedQty: 0,
-            availableQty: skuQty || 100,
+            availableQty: initQty,
           },
         });
       }
@@ -122,9 +123,14 @@ export async function executeLinks(
         result.inventoryLogId = log.id;
       }
 
-      // 赔付/重新发货：扣减库存
+      // 赔付/重新发货：扣减库存（检查可用量是否充足）
       if (hasDeduction) {
         const deductQty = skuQty || 1;
+        // 重新读取最新库存，检查可用量
+        const currentInv = await tx.inventory.findUnique({ where: { skuCode } });
+        if (currentInv && currentInv.availableQty < deductQty) {
+          throw new Error(`库存不足: ${skuCode} 可用量 ${currentInv.availableQty}，需要 ${deductQty}`);
+        }
         await tx.inventory.update({
           where: { skuCode },
           data: {
@@ -146,18 +152,19 @@ export async function executeLinks(
         result.inventoryLogId = log.id;
       }
 
-      // 解锁品控暂扣批次
+      // 解锁品控暂扣批次：仅递减 lockedQty，不清零
       if (ticket.scanRecords.length > 0) {
+        const lockedCount = ticket.scanRecords.length;
         for (const sr of ticket.scanRecords) {
           await tx.scanRecord.update({
             where: { id: sr.id },
             data: { batchStatus: 'unlocked' },
           });
         }
-        // 同时更新 inventory 锁定数
+        // 仅递减锁定数，而非清零
         await tx.inventory.update({
           where: { skuCode },
-          data: { lockedQty: 0 },
+          data: { lockedQty: { decrement: lockedCount } },
         });
       }
     }

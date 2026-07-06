@@ -14,8 +14,8 @@ export async function POST(
     const body = await req.json();
     const { approverId, approverName, approverRole, comment, scanRecordId } = body;
 
-    if (!approverId || !approverRole) {
-      return NextResponse.json({ error: '缺少操作人信息' }, { status: 400 });
+    if (!approverId || !approverRole || !approverName) {
+      return NextResponse.json({ error: '缺少操作人信息（id, name, role）' }, { status: 400 });
     }
 
     // 权限检查：仅品控主管可操作

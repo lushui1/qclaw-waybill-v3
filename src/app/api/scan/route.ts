@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { executeQcCheck, getDefaultSeverity } from '@/lib/qc-engine';
 import { verifyWaybill, verifySkuBelongsToWaybill } from '@/lib/v2-client';
+import { handleGetError } from '@/lib/api-error-handler';
 
 // GET: 获取扫描记录列表
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20'), 100);
     const waybillId = searchParams.get('waybillId');
 
     const where: any = {};
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ records, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'GET /api/scan');
   }
 }
 
@@ -125,17 +126,29 @@ export async function POST(req: NextRequest) {
       });
       const level1Cfg = configs.find(c => c.level === 1);
       const timeoutHours = level1Cfg?.timeoutHours ?? 24;
-      const estimatedAmount = actualQty ? Math.abs((expectedQty || 0) - actualQty) * 100 : 0;
 
-      // 查找匹配的规则来确定自动进入哪级审批
+      // 查找匹配的规则来确定自动进入哪级审批和单价
       const hitRule = qcResult.hitRuleId
         ? await prisma.qcRule.findUnique({ where: { id: qcResult.hitRuleId } })
         : null;
       const autoLevel = hitRule?.autoLevel || 1;
+      // 数量差异 × 默认单价 100 元/件 = 预估金额
+      const unitPrice = 100;
+      const estimatedAmount = actualQty ? Math.abs((expectedQty || 0) - actualQty) * unitPrice : 0;
 
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const count = await prisma.ticket.count();
-      const ticketNo = `TKT-${today}-${String(count + 1).padStart(4, '0')}`;
+      // 用当天最大序号+1，替代 count 防竞态
+      const lastTicket = await prisma.ticket.findFirst({
+        where: { ticketNo: { startsWith: `TKT-${today}` } },
+        orderBy: { ticketNo: 'desc' },
+        select: { ticketNo: true },
+      });
+      let seq = 1;
+      if (lastTicket) {
+        const lastSeq = parseInt(lastTicket.ticketNo.split('-').pop() || '0', 10);
+        seq = lastSeq + 1;
+      }
+      const ticketNo = `TKT-${today}-${String(seq).padStart(4, '0')}`;
 
       ticket = await prisma.ticket.create({
         data: {
@@ -172,6 +185,6 @@ export async function POST(req: NextRequest) {
       ticket,
     }, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'POST /api/scan');
   }
 }

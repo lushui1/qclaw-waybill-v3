@@ -43,10 +43,18 @@ export function canSelfApprove(reporterId: string, approverId: string): boolean 
   return reporterId !== approverId;
 }
 
-/** 乐观锁校验：检查工单版本号 */
-export async function checkConcurrency(ticketId: string): Promise<void> {
-  // 放在事务中做，在 update 时校验 version
-  // 实际在 approve/reject API 中用 where: { id, version } 实现
+/** 乐观锁校验：检查工单版本号（如 version 不匹配则抛出异常） */
+export async function checkConcurrency(ticketId: string, expectedStatus: string): Promise<void> {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: { status: true, updatedAt: true },
+  });
+  if (!ticket) {
+    throw new Error('工单不存在');
+  }
+  if (ticket.status !== expectedStatus) {
+    throw new Error(`并发冲突：工单状态已变更为 "${ticket.status}"，期望为 "${expectedStatus}"，请刷新后重试`);
+  }
 }
 
 /** 生成操作令牌（幂等性） */

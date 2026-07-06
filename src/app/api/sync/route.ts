@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { syncWaybills } from '@/lib/v2-client';
+import { handleGetError } from '@/lib/api-error-handler';
 
 // POST: 手动触发 V2 运单同步
 export async function POST(req: NextRequest) {
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
       requestId: result.requestId,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'POST /api/sync');
   }
 }
 
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20'), 100);
     const success = searchParams.get('success'); // 'true' | 'false' | null
 
     const where: any = {};
@@ -116,6 +117,6 @@ export async function GET(req: NextRequest) {
       recentStats,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'GET /api/sync');
   }
 }

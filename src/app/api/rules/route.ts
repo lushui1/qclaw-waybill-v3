@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma, isDbError } from '@/lib/db';
+import { handleGetError, handleMutationError } from '@/lib/api-error-handler';
 
 // GET: 获取品控规则列表
 export async function GET() {
@@ -9,7 +10,8 @@ export async function GET() {
     });
     return NextResponse.json(rules);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (isDbError(error)) return NextResponse.json([]);
+    return handleGetError(error, 'GET /api/rules');
   }
 }
 

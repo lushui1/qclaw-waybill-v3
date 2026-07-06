@@ -1,18 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  pending_approval:       { label: '待审批',    color: 'tag-warning' },
-  level1_approving:       { label: '一级审批中', color: 'tag-info' },
-  level2_approving:       { label: '二级审批中', color: 'tag-info' },
-  executing:              { label: '执行中',     color: 'tag-info' },
-  completed:              { label: '已完成',     color: 'tag-success' },
-  rejected:               { label: '已拒绝',     color: 'tag-error' },
-  resubmitted:            { label: '重新提交',   color: 'tag-warning' },
-  timeout_auto_rejected:  { label: '超时驳回',   color: 'tag-error' },
-  fast_released:          { label: '快速放行',   color: 'tag-success' },
+const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
+  pending_approval:       { label: '待审批',    cls: 'tag-warning' },
+  level1_approving:       { label: '一级审批中', cls: 'tag-info' },
+  level2_approving:       { label: '二级审批中', cls: 'tag-info' },
+  executing:              { label: '执行中',     cls: 'tag-info' },
+  completed:              { label: '已完成',     cls: 'tag-success' },
+  rejected:               { label: '已拒绝',     cls: 'tag-error' },
+  resubmitted:            { label: '重新提交',   cls: 'tag-warning' },
+  timeout_auto_rejected:  { label: '超时驳回',   cls: 'tag-error' },
+  fast_released:          { label: '快速放行',   cls: 'tag-success' },
 };
 
 const ANOMALY_LABELS: Record<string, string> = {
@@ -47,45 +46,60 @@ export default function TicketsPage() {
 
   const totalPages = Math.ceil(total / 20);
 
-  const handleDelete = async (id: string) => {
-    // 软删除不可行，这里只做展示
-  };
-
   return (
-    <div style={{ minHeight: '100vh', padding: '24px 20px' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)' }}>📋 异常工单</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>共 {total} 条</p>
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <Link href="/" className="btn-outline">← 首页</Link>
-          </div>
+    <>
+      <div className="page-header">
+        <div>
+          <div className="page-title">📋 异常工单</div>
+          <div className="page-subtitle">共 {total} 条记录</div>
         </div>
+      </div>
 
-        {/* 筛选 */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <select className="input" value={filters.status} onChange={e => { setFilters(f => ({ ...f, status: e.target.value })); setPage(1); }} style={{ maxWidth: 150 }}>
+      {/* 筛选条件 */}
+      <div className="filter-bar">
+        <div className="filter-row">
+          <div className="filter-group">
+            <label>状态</label>
+            <select className="input" value={filters.status}
+              onChange={e => { setFilters(f => ({ ...f, status: e.target.value })); setPage(1); }}>
               <option value="">全部状态</option>
               {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
-            <select className="input" value={filters.anomalyType} onChange={e => { setFilters(f => ({ ...f, anomalyType: e.target.value })); setPage(1); }} style={{ maxWidth: 150 }}>
+          </div>
+          <div className="filter-group">
+            <label>异常类型</label>
+            <select className="input" value={filters.anomalyType}
+              onChange={e => { setFilters(f => ({ ...f, anomalyType: e.target.value })); setPage(1); }}>
               <option value="">全部类型</option>
               {Object.entries(ANOMALY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <select className="input" value={filters.source} onChange={e => { setFilters(f => ({ ...f, source: e.target.value })); setPage(1); }} style={{ maxWidth: 150 }}>
+          </div>
+          <div className="filter-group">
+            <label>来源</label>
+            <select className="input" value={filters.source}
+              onChange={e => { setFilters(f => ({ ...f, source: e.target.value })); setPage(1); }}>
               <option value="">全部来源</option>
               <option value="manual_report">手工上报</option>
               <option value="scan_auto">扫描触发</option>
             </select>
-            <input className="input" placeholder="搜索工单号/上报人..." value={filters.keyword} onChange={e => { setFilters(f => ({ ...f, keyword: e.target.value })); setPage(1); }} style={{ maxWidth: 250 }} />
+          </div>
+          <div className="filter-group" style={{ minWidth: 220 }}>
+            <label>搜索</label>
+            <input className="input" placeholder="工单号/上报人/描述" value={filters.keyword}
+              onChange={e => { setFilters(f => ({ ...f, keyword: e.target.value })); setPage(1); }} />
+          </div>
+          <div className="filter-actions">
+            <button className="btn btn-primary" onClick={fetchTickets}>🔍 查询</button>
+            <button className="btn" onClick={() => { setFilters({ status: '', anomalyType: '', source: '', keyword: '' }); setPage(1); }}>
+              重置
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* 列表 */}
-        <div className="table-container" style={{ maxHeight: '70vh', overflow: 'auto' }}>
+      {/* 数据表格 */}
+      <div className="table-wrapper">
+        <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
           <table>
             <thead>
               <tr>
@@ -93,30 +107,28 @@ export default function TicketsPage() {
                 <th>类型</th>
                 <th>来源</th>
                 <th>状态</th>
-                <th>运单</th>
-                <th>金额</th>
+                <th>运单号</th>
+                <th className="cell-num">金额</th>
                 <th>上报人</th>
                 <th>上报时间</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {tickets.map((t: any) => {
-                const st = STATUS_LABELS[t.status] || { label: t.status, color: '' };
+              {tickets.map(t => {
+                const st = STATUS_LABELS[t.status] || { label: t.status, cls: '' };
                 return (
                   <tr key={t.id}>
                     <td><code style={{ fontSize: 12 }}>{t.ticketNo}</code></td>
-                    <td style={{ fontSize: 13 }}>{ANOMALY_LABELS[t.anomalyType] || t.anomalyType}</td>
-                    <td style={{ fontSize: 13 }}>{t.source === 'scan_auto' ? '📷 扫描' : '✋ 手工'}</td>
-                    <td><span className={`tag ${st.color}`}>{st.label}</span></td>
-                    <td style={{ fontSize: 13 }}>{t.waybill?.externalCode || '-'}</td>
-                    <td style={{ fontSize: 13 }}>{t.estimatedAmount ? `¥${(t.estimatedAmount / 100).toFixed(2)}` : '-'}</td>
-                    <td style={{ fontSize: 13 }}>{t.reporterName || '-'}</td>
+                    <td>{ANOMALY_LABELS[t.anomalyType] || t.anomalyType}</td>
+                    <td>{t.source === 'scan_auto' ? '📷 扫描' : '✋ 手工'}</td>
+                    <td><span className={`tag ${st.cls}`}>{st.label}</span></td>
+                    <td style={{ fontSize: 12 }}>{t.waybill?.externalCode || '-'}</td>
+                    <td className="cell-num">{t.estimatedAmount ? `¥${(t.estimatedAmount / 100).toFixed(2)}` : '-'}</td>
+                    <td>{t.reporterName || '-'}</td>
                     <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{new Date(t.createdAt).toLocaleString()}</td>
                     <td>
-                      <Link href={`/tickets/${t.id}`} className="btn-outline btn-sm" style={{ textDecoration: 'none' }}>
-                        详情
-                      </Link>
+                      <a href={`/tickets/${t.id}`} className="btn btn-sm">详情</a>
                     </td>
                   </tr>
                 );
@@ -128,14 +140,17 @@ export default function TicketsPage() {
           </table>
         </div>
 
+        {/* 分页 */}
         {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 16 }}>
-            <button className="btn-outline btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>上一页</button>
-            <span style={{ lineHeight: '32px', fontSize: 13, color: 'var(--text-muted)' }}>第 {page}/{totalPages} 页</span>
-            <button className="btn-outline btn-sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>下一页</button>
+          <div className="pagination-bar">
+            <span>共 {total} 条，第 {page}/{totalPages} 页</span>
+            <div className="pagination-actions">
+              <button className="btn btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>上一页</button>
+              <button className="btn btn-sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>下一页</button>
+            </div>
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

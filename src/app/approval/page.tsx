@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -27,20 +26,16 @@ export default function ApprovalPage() {
   useEffect(() => {
     fetch('/api/users').then(r => r.json()).then(users => {
       if (users.length > 0) setCurrentUser(users[0]);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const fetchPending = () => {
     if (!currentUser) return;
     setLoading(true);
     const params = new URLSearchParams({
-      page: String(page),
-      pageSize: '20',
-      approverId: currentUser.id,
-      approverRole: currentUser.role,
+      page: String(page), pageSize: '20',
+      approverId: currentUser.id, approverRole: currentUser.role,
     });
-
     fetch(`/api/approval?${params}`).then(r => r.json()).then(data => {
       setTickets(data.tickets || []);
       setTotal(data.total || 0);
@@ -52,29 +47,35 @@ export default function ApprovalPage() {
   const totalPages = Math.ceil(total / 20);
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px 20px' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)' }}>✅ 我的审批</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>
-              {currentUser ? `${currentUser.name} · ${currentUser.role}` : '请先配置用户'} · 待处理 {total} 条
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <select className="input" style={{ maxWidth: 200 }} value={currentUser?.id || ''} onChange={e => {
-              const user = tickets.find((t: any) => t.id === e.target.value);
-              // 简化处理，用户切换通过刷新页面实现
-            }}>
-              <option value="">选择用户（测试用）</option>
-              {/* 用户选择会在 seed 后生效 */}
-            </select>
-            <Link href="/" className="btn-outline">← 首页</Link>
+    <>
+      <div className="page-header">
+        <div>
+          <div className="page-title">✅ 我的审批</div>
+          <div className="page-subtitle">
+            {currentUser ? `${currentUser.name} · ${currentUser.role}` : '请先配置用户'} · 待处理 {total} 条
           </div>
         </div>
+      </div>
 
-        {/* 待审批列表 */}
-        <div className="table-container" style={{ maxHeight: '70vh', overflow: 'auto' }}>
+      {/* 统计行 */}
+      <div className="stats-bar">
+        <div className="stats-item">
+          <span className="label">待处理</span>
+          <span className="value" style={{ color: 'var(--warning)' }}>{total}</span>
+        </div>
+        <div className="stats-item">
+          <span className="label">当前用户</span>
+          <span className="value">{currentUser?.name || '-'}</span>
+        </div>
+        <div className="stats-item">
+          <span className="label">角色</span>
+          <span className="value">{currentUser?.role || '-'}</span>
+        </div>
+      </div>
+
+      {/* 数据表格 */}
+      <div className="table-wrapper">
+        <div style={{ overflow: 'auto', maxHeight: '65vh' }}>
           <table>
             <thead>
               <tr>
@@ -83,35 +84,33 @@ export default function ApprovalPage() {
                 <th>来源</th>
                 <th>当前状态</th>
                 <th>层级</th>
-                <th>金额</th>
+                <th className="cell-num">金额</th>
                 <th>上报人</th>
-                <th>超时时间</th>
+                <th>超时</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {tickets.map((t: any) => (
+              {tickets.map(t => (
                 <tr key={t.id} style={t.isUrgent ? { background: 'var(--warning-bg)' } : {}}>
                   <td><code style={{ fontSize: 12 }}>{t.ticketNo}</code></td>
-                  <td style={{ fontSize: 13 }}>{ANOMALY_LABELS[t.anomalyType] || t.anomalyType}</td>
-                  <td style={{ fontSize: 13 }}>{t.source === 'scan_auto' ? '📷 扫描' : '✋ 手工'}</td>
-                  <td style={{ fontSize: 13 }}>{STATUS_LABELS[t.status] || t.status}</td>
-                  <td style={{ fontSize: 13 }}>第{t.currentLevel}级</td>
-                  <td style={{ fontSize: 13 }}>{t.estimatedAmount ? `¥${(t.estimatedAmount / 100).toFixed(2)}` : '-'}</td>
-                  <td style={{ fontSize: 13 }}>{t.reporterName || '-'}</td>
-                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  <td>{ANOMALY_LABELS[t.anomalyType] || t.anomalyType}</td>
+                  <td>{t.source === 'scan_auto' ? '📷 扫描' : '✋ 手工'}</td>
+                  <td>{STATUS_LABELS[t.status] || t.status}</td>
+                  <td>第{t.currentLevel}级</td>
+                  <td className="cell-num">{t.estimatedAmount ? `¥${(t.estimatedAmount / 100).toFixed(2)}` : '-'}</td>
+                  <td>{t.reporterName || '-'}</td>
+                  <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                     {t.isUrgent ? (
-                      <span style={{ color: 'var(--error)', fontWeight: 500 }}>
-                        ⚠️ {t.timeLeft}h
-                      </span>
+                      <span style={{ color: 'var(--error)', fontWeight: 500 }}>⚠️ {t.timeLeft}h</span>
                     ) : t.timeLeft !== null ? (
                       <span style={{ color: 'var(--text-muted)' }}>{t.timeLeft}h</span>
                     ) : '-'}
                   </td>
                   <td>
-                    <Link href={`/tickets/${t.id}`} className="btn-primary btn-sm" style={{ textDecoration: 'none' }}>
+                    <a href={`/tickets/${t.id}`} className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>
                       处理
-                    </Link>
+                    </a>
                   </td>
                 </tr>
               ))}
@@ -123,13 +122,15 @@ export default function ApprovalPage() {
         </div>
 
         {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 16 }}>
-            <button className="btn-outline btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>上一页</button>
-            <span style={{ lineHeight: '32px', fontSize: 13, color: 'var(--text-muted)' }}>第 {page}/{totalPages} 页</span>
-            <button className="btn-outline btn-sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>下一页</button>
+          <div className="pagination-bar">
+            <span>共 {total} 条，第 {page}/{totalPages} 页</span>
+            <div className="pagination-actions">
+              <button className="btn btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>上一页</button>
+              <button className="btn btn-sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>下一页</button>
+            </div>
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

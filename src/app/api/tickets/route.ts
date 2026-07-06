@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { TicketStateMachine, isActionable, isTerminalStatus } from '@/lib/ticket-state-machine';
 import { verifyWaybill } from '@/lib/v2-client';
+import { handleGetError } from '@/lib/api-error-handler';
 
 // GET: 工单列表（支持筛选/分页）
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20'), 100);
     const status = searchParams.get('status');
     const anomalyType = searchParams.get('anomalyType');
     const source = searchParams.get('source');
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'GET /api/tickets');
   }
 }
 
@@ -110,10 +111,19 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    // 3. 生成工单号
+    // 3. 生成工单号（使用数据库事务保证唯一递增）
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const count = await prisma.ticket.count();
-    const ticketNo = `TKT-${today}-${String(count + 1).padStart(4, '0')}`;
+    const lastTicket = await prisma.ticket.findFirst({
+      where: { ticketNo: { startsWith: `TKT-${today}` } },
+      orderBy: { ticketNo: 'desc' },
+      select: { ticketNo: true },
+    });
+    let seq = 1;
+    if (lastTicket) {
+      const lastSeq = parseInt(lastTicket.ticketNo.split('-').pop() || '0', 10);
+      seq = lastSeq + 1;
+    }
+    const ticketNo = `TKT-${today}-${String(seq).padStart(4, '0')}`;
 
     // 4. 计算超时时间（一级审批）
     const configs = await prisma.approvalLevelConfig.findMany({ where: { enabled: true } });
@@ -141,7 +151,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(ticket, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'POST /api/tickets');
   }
 }
 
@@ -181,6 +191,6 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ error: '未知操作' }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return handleGetError(error, 'PATCH /api/tickets');
   }
 }
