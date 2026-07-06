@@ -45,14 +45,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '缺少必要参数: waybillId, skuCode' }, { status: 400 });
     }
 
-    // 1. 获取运单快照
-    const waybill = await prisma.waybillSnapshot.findUnique({ where: { id: waybillId } });
+    // 1. 获取运单快照（支持 id 和 v2OrderId 两种查询）
+    let waybill = await prisma.waybillSnapshot.findUnique({ where: { id: waybillId } });
+    if (!waybill) {
+      waybill = await prisma.waybillSnapshot.findUnique({ where: { v2OrderId: waybillId } });
+    }
     if (!waybill) {
       return NextResponse.json({ error: '运单不存在，请先同步数据' }, { status: 404 });
     }
 
     // 2. 实时调用 V2 接口校验 SKU 归属
-    const skuResult = await verifySkuBelongsToWaybill(waybill.v2OrderId, skuCode);
+    // 先查看本地 skuSummary 是否包含该 SKU
+    let matchedV2OrderId = waybill.v2OrderId;
+    let skuFound = false;
+    if (waybill.skuSummary) {
+      try {
+        const skus = JSON.parse(waybill.skuSummary);
+        if (Array.isArray(skus)) {
+          skuFound = skus.some((s: any) => s.skuCode === skuCode);
+        }
+      } catch {}
+    }
+    // 如果本地 skuSummary 不匹配，可能是因为同 externalCode 下不同 v2Order 的 SKU
+    // 查找同 externalCode 的其他 WaybillSnapshot
+    if (!skuFound && waybill.externalCode) {
+      const siblings = await prisma.waybillSnapshot.findMany({
+        where: { externalCode: waybill.externalCode, id: { not: waybill.id } },
+        select: { v2OrderId: true, skuSummary: true },
+      });
+      for (const sib of siblings) {
+        if (sib.skuSummary) {
+          try {
+            const skus = JSON.parse(sib.skuSummary);
+            if (Array.isArray(skus) && skus.some((s: any) => s.skuCode === skuCode)) {
+              matchedV2OrderId = sib.v2OrderId;
+              skuFound = true;
+              break;
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // 用匹配到的 v2OrderId 去 V2 接口校验
+    const skuResult = await verifySkuBelongsToWaybill(matchedV2OrderId, skuCode);
     if (!skuResult.success) {
       return NextResponse.json({
         error: `SKU 校验失败: ${skuResult.error}`,

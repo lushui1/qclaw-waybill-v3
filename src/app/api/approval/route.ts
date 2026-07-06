@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { handleGetError } from '@/lib/api-error-handler';
+import { TicketStateMachine } from '@/lib/ticket-state-machine';
 
-// GET: 获取待审批工单列表
+// GET: 获取待审批工单列表（含超时惰性检查）
 export async function GET(req: NextRequest) {
   try {
+    // 先检查超时工单（惰性检测）
+    await checkTimeouts();
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20'), 100);
@@ -62,5 +65,45 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     return handleGetError(error, 'GET /api/approval');
+  }
+}
+
+/** 惰性超时检查：每次查询待审批列表时自动处理超时工单 */
+async function checkTimeouts() {
+  try {
+    const now = new Date();
+    const expiredTickets = await prisma.ticket.findMany({
+      where: {
+        status: { in: ['pending_approval', 'level1_approving', 'level2_approving'] },
+        timeoutAt: { lte: now },
+      },
+      select: { id: true, status: true, currentLevel: true },
+    });
+
+    for (const t of expiredTickets) {
+      const machine = new TicketStateMachine(t.status as any);
+      if (t.currentLevel === 1 && t.status === 'level1_approving') {
+        // 一级超时 → 升二级
+        if (machine.canTransition('level2_approving')) {
+          await prisma.ticket.update({
+            where: { id: t.id },
+            data: { status: 'level2_approving', currentLevel: 2, updatedAt: now },
+          });
+        }
+      } else if (t.currentLevel === 2 || t.status === 'pending_approval') {
+        // 二级超时/待审批超时 → 自动驳回
+        if (machine.canTransition('timeout_auto_rejected')) {
+          await prisma.ticket.update({
+            where: { id: t.id },
+            data: { status: 'timeout_auto_rejected', updatedAt: now },
+          });
+        }
+      }
+    }
+    if (expiredTickets.length > 0) {
+      console.log(`[Timeout] 自动处理了 ${expiredTickets.length} 个超时工单`);
+    }
+  } catch (err) {
+    console.error('[Timeout] 超时检查失败:', (err as Error).message);
   }
 }

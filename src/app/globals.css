@@ -1,28 +1,29 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════
-   ZTO 中通冷链风格 — 深蓝侧边栏 · 白底内容
+   鲸天风格 — 清爽蓝绿色调 · 圆角卡片
+   考试要求：与 V2 视觉统一，主色 #0FC6C2
    ═══════════════════════════════════════ */
 
 :root {
-  /* 品牌色 — 深蓝 */
-  --sidebar-bg: #001529;
-  --sidebar-hover: #002140;
-  --sidebar-active: #1890FF;
+  /* 品牌色 */
+  --sidebar-bg: #FFFFFF;
+  --sidebar-active: #0FC6C2;
+  --sidebar-hover: #E0FAFA;
   --header-bg: #FFFFFF;
   --header-height: 56px;
   --sidebar-width: 220px;
 
-  /* 主色调 */
-  --primary: #1890FF;
-  --primary-hover: #40A9FF;
-  --primary-light: #E6F7FF;
-  --primary-dark: #096DD9;
+  /* 主色调 — 鲸天青 */
+  --primary: #0FC6C2;
+  --primary-hover: #0DA8A4;
+  --primary-light: #E0FAFA;
+  --primary-dark: #0A8A86;
 
   /* 成功 */
-  --success: #27AE60;
-  --success-hover: #2ECC71;
-  --success-light: #E8F8F0;
+  --success: #0FC6C2;
+  --success-hover: #0DA8A4;
+  --success-light: #E0FAFA;
 
   /* 语义色 */
   --error: #E53E3E;
@@ -68,10 +69,10 @@ body {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  overflow-x: hidden;
   z-index: 100;
 }
 
@@ -79,39 +80,38 @@ body {
   height: var(--header-height);
   display: flex;
   align-items: center;
-  padding: 0 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
   gap: 10px;
   flex-shrink: 0;
 }
 
 .sidebar-logo .logo-icon {
-  width: 32px;
-  height: 32px;
-  background: var(--sidebar-active);
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  background: var(--primary);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 20px;
   color: #fff;
   flex-shrink: 0;
 }
 
 .sidebar-logo .logo-text {
-  color: #fff;
+  color: var(--text);
   font-size: 16px;
   font-weight: 600;
-  white-space: nowrap;
 }
 
 .sidebar-logo .logo-sub {
-  color: rgba(255,255,255,0.45);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .sidebar-menu {
-  padding: 8px 0;
+  padding: 12px 0;
   flex: 1;
 }
 
@@ -120,23 +120,25 @@ body {
   align-items: center;
   gap: 10px;
   padding: 10px 24px;
-  color: rgba(255,255,255,0.65);
+  color: var(--text-secondary);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
   text-decoration: none;
-  position: relative;
+  border-left: 3px solid transparent;
 }
 
 .sidebar-menu-item:hover {
-  color: #fff;
+  color: var(--primary);
   background: var(--sidebar-hover);
 }
 
 .sidebar-menu-item.active,
 .sidebar-menu-item[data-active="true"] {
-  color: #fff;
-  background: var(--sidebar-active);
+  color: var(--primary);
+  background: var(--sidebar-hover);
+  border-left-color: var(--primary);
+  font-weight: 600;
 }
 
 .sidebar-menu-item .menu-icon {

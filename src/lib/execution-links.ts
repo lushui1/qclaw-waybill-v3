@@ -19,7 +19,8 @@ export interface ExecutionResult {
 export async function executeLinks(
   ticketId: string,
   approvalRecordId: string,
-  actualAmount?: number
+  actualAmount?: number,
+  prismaTx?: any // 外部事务客户端（避免嵌套事务导致外键不可见）
 ): Promise<ExecutionResult> {
   const ticket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -37,8 +38,8 @@ export async function executeLinks(
     actions: [],
   };
 
-  // 在事务中执行所有联动操作
-  await prisma.$transaction(async (tx) => {
+  // 使用传入的事务客户端执行联动操作
+  const run = async (client: any) => {
     const amount = actualAmount !== undefined ? actualAmount : Number(ticket.estimatedAmount);
     const isLogistics = isLogisticsAnomaly(ticket.anomalyType);
     const actionMap = isLogistics ? LOGISTICS_ANOMALY_ACTIONS : QC_ANOMALY_ACTIONS;
@@ -48,12 +49,11 @@ export async function executeLinks(
     // 1. 创建赔付记录（如果需要赔付）
     if (actionMap[ticket.anomalyType]?.needsPayment) {
       const direction: PaymentDirection = actionMap[ticket.anomalyType].direction;
-
-      const payment = await tx.paymentRecord.create({
+      const payment = await client.paymentRecord.create({
         data: {
           ticketId,
           approvalRecordId,
-          amount: amount,
+          amount,
           direction,
           status: 'pending',
           settlementMethod: direction === 'to_customer' ? '客户理赔' : '供应商扣款',
@@ -64,7 +64,6 @@ export async function executeLinks(
     }
 
     // 2. 库存联动
-    // 解析 SKU 信息
     let skuCode = '';
     let skuQty = 0;
     try {
@@ -82,93 +81,48 @@ export async function executeLinks(
       const hasRestock = actions.includes('restock') || actions.includes('return_warehouse') || actions.includes('return_to_supplier');
       const hasDeduction = actions.includes('compensate');
 
-      // 找出需要操作的库存记录
-      let inventory = await tx.inventory.findUnique({ where: { skuCode } });
+      let inventory = await client.inventory.findUnique({ where: { skuCode } });
 
       if (!inventory) {
-        // 库存不存在则创建（按实际数量初始化，避免魔数）
-        const initQty = Math.max(skuQty, 10); // 至少 10 件
-        inventory = await tx.inventory.create({
-          data: {
-            skuCode,
-            skuName: skuCode,
-            totalQty: initQty,
-            lockedQty: 0,
-            availableQty: initQty,
-          },
+        const initQty = Math.max(skuQty, 10);
+        inventory = await client.inventory.create({
+          data: { skuCode, skuName: skuCode, totalQty: initQty, lockedQty: 0, availableQty: initQty },
         });
       }
 
-      // 退货入库：增加库存
       if (hasRestock) {
         const returnQty = skuQty || 1;
-        await tx.inventory.update({
-          where: { skuCode },
-          data: {
-            totalQty: { increment: returnQty },
-            availableQty: { increment: returnQty },
-          },
-        });
-        const log = await tx.inventoryLog.create({
-          data: {
-            skuCode,
-            changeType: 'return_in',
-            qty: returnQty,
-            relatedId: ticketId,
-            relatedType: 'ticket',
-            remark: `异常处理退货入库: ${ticket.ticketNo}`,
-          },
-        });
+        await client.inventory.update({ where: { skuCode }, data: { totalQty: { increment: returnQty }, availableQty: { increment: returnQty } } });
+        await client.inventoryLog.create({ data: { skuCode, changeType: 'return_in', qty: returnQty, relatedId: ticketId, relatedType: 'ticket', remark: `异常处理退货入库: ${ticket.ticketNo}` } });
         result.inventoryUpdated = true;
-        result.inventoryLogId = log.id;
       }
 
-      // 赔付/重新发货：扣减库存（检查可用量是否充足）
       if (hasDeduction) {
         const deductQty = skuQty || 1;
-        // 重新读取最新库存，检查可用量
-        const currentInv = await tx.inventory.findUnique({ where: { skuCode } });
+        const currentInv = await client.inventory.findUnique({ where: { skuCode } });
         if (currentInv && currentInv.availableQty < deductQty) {
           throw new Error(`库存不足: ${skuCode} 可用量 ${currentInv.availableQty}，需要 ${deductQty}`);
         }
-        await tx.inventory.update({
-          where: { skuCode },
-          data: {
-            totalQty: { decrement: deductQty },
-            availableQty: { decrement: deductQty },
-          },
-        });
-        const log = await tx.inventoryLog.create({
-          data: {
-            skuCode,
-            changeType: 'deduction',
-            qty: deductQty,
-            relatedId: ticketId,
-            relatedType: 'ticket',
-            remark: `异常处理赔付扣库存: ${ticket.ticketNo}`,
-          },
-        });
+        await client.inventory.update({ where: { skuCode }, data: { totalQty: { decrement: deductQty }, availableQty: { decrement: deductQty } } });
+        await client.inventoryLog.create({ data: { skuCode, changeType: 'deduction', qty: deductQty, relatedId: ticketId, relatedType: 'ticket', remark: `异常处理赔付扣库存: ${ticket.ticketNo}` } });
         result.inventoryUpdated = true;
-        result.inventoryLogId = log.id;
       }
 
-      // 解锁品控暂扣批次：仅递减 lockedQty，不清零
       if (ticket.scanRecords.length > 0) {
-        const lockedCount = ticket.scanRecords.length;
         for (const sr of ticket.scanRecords) {
-          await tx.scanRecord.update({
-            where: { id: sr.id },
-            data: { batchStatus: 'unlocked' },
-          });
+          await client.scanRecord.update({ where: { id: sr.id }, data: { batchStatus: 'unlocked' } });
         }
-        // 仅递减锁定数，而非清零
-        await tx.inventory.update({
-          where: { skuCode },
-          data: { lockedQty: { decrement: lockedCount } },
-        });
+        await client.inventory.update({ where: { skuCode }, data: { lockedQty: { decrement: ticket.scanRecords.length } } });
       }
     }
-  });
+  };
+
+  // 如果传入了外部事务客户端则复用，否则创建独立事务
+  if (prismaTx) {
+    await run(prismaTx);
+  } else {
+    await prisma.$transaction(run);
+  }
 
   return result;
 }

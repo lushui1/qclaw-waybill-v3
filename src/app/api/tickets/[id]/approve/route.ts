@@ -106,8 +106,8 @@ export async function POST(
       // 如果进入 executing 状态，触发执行联动（赔付+库存）
       let executionResult = null;
       if (nextStatus === 'executing') {
-        // 联动失败会触发事务回滚，保证审批 + 联动一致性
-        executionResult = await executeLinks(id, approval.id, amount ? Math.round(Number(amount) * 100) : undefined);
+        // 传入 tx 避免嵌套事务导致外键不可见
+        executionResult = await executeLinks(id, approval.id, amount ? Math.round(Number(amount) * 100) : undefined, tx);
       }
 
       return { approval, ticket: updated, executionResult };

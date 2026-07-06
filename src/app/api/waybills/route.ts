@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
           receiverStore: true,
           totalAmount: true,
           lastSyncedAt: true,
+          skuSummary: true,
         },
         orderBy: { lastSyncedAt: 'desc' },
         skip: (page - 1) * pageSize,

@@ -26,6 +26,7 @@ export default function TicketDetailPage() {
   const [comment, setComment] = useState('');
   const [amount, setAmount] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
 
   const fetchTicket = () => {
     fetch(`/api/tickets?searchId=${ticketId}`).then(r => r.json()).then(data => {
@@ -36,8 +37,22 @@ export default function TicketDetailPage() {
 
   const fetchUser = () => {
     fetch('/api/users').then(r => r.json()).then(users => {
-      if (users.length > 0) setCurrentUser(users[0]);
+      setAllUsers(users);
+      if (users.length > 0) {
+        // 从 localStorage 读取上次选择的用户
+        const saved = localStorage.getItem('currentUser');
+        const found = saved ? users.find((u: any) => u.id === saved) : null;
+        setCurrentUser(found || users[0]);
+      }
     }).catch(() => {});
+  };
+
+  const switchUser = (userId: string) => {
+    const user = allUsers.find(u => u.id === userId);
+    if (user) {
+      setCurrentUser(user);
+      localStorage.setItem('currentUser', userId);
+    }
   };
 
   useEffect(() => { fetchTicket(); fetchUser(); }, [ticketId]);
@@ -147,7 +162,16 @@ export default function TicketDetailPage() {
           <div className="page-title">工单详情</div>
           <div className="page-subtitle">{ticket.ticketNo}</div>
         </div>
-        <button className="btn" onClick={() => router.push('/tickets')}>← 返回列表</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select className="input" value={currentUser?.id || ''}
+            onChange={e => switchUser(e.target.value)}
+            style={{ maxWidth: 200, fontSize: 13 }}>
+            {allUsers.map(u => (
+              <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+            ))}
+          </select>
+          <button className="btn" onClick={() => router.push('/tickets')}>← 返回列表</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>

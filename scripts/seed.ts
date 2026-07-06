@@ -7,12 +7,20 @@
 
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import dotenv from 'dotenv';
+
+// 加载 .env 文件中的 DATABASE_URL
+dotenv.config();
 
 async function main() {
   const { Pool } = require('pg');
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgresql://placeholder:placeholder@localhost:5432/postgres',
-  });
+  const dbUrl = process.env.DATABASE_URL || '';
+  if (!dbUrl || dbUrl.includes('placeholder')) {
+    console.error('请先配置 DATABASE_URL（当前为占位符）');
+    console.error('运行: npx tsx scripts/init-db.ts');
+    process.exit(1);
+  }
+  const pool = new Pool({ connectionString: dbUrl });
   const adapter = new PrismaPg(pool);
   const prisma = new PrismaClient({ adapter });
 

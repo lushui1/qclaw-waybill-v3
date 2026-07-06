@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import UserSwitcher from "./UserSwitcher";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,17 +58,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
 function Sidebar() {
   const menuItems = [
     { href: '/',              icon: '🏠', label: '首页' },
+    { href: '/tickets',       icon: '📋', label: '工单列表' },
+    { href: '/tickets/new',   icon: '📝', label: '异常上报' },
     { href: '/scan',          icon: '📷', label: '扫描品控' },
-    { href: '/tickets',       icon: '📋', label: '异常工单' },
-    { href: '/approval',      icon: '✅', label: '我的审批' },
+    { href: '/approval',      icon: '✅', label: '待我审批' },
     { href: '/rules',         icon: '⚙️', label: '品控规则' },
-    { href: '/sync',          icon: '🔄', label: '接口同步' },
+    { href: '/sync',          icon: '🔄', label: '接口监控' },
   ];
 
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <div className="logo-icon">📦</div>
+        <div className="logo-icon">🐋</div>
         <div>
           <div className="logo-text">运单管理 V3</div>
           <div className="logo-sub">Waybill Control</div>
@@ -106,22 +108,9 @@ function TopHeader() {
   return (
     <header className="top-header">
       <div className="top-header-left" />
-      <div className="top-header-right">
-        <a href="/tickets" className="header-action-btn">
-          📋 待办
-          <span className="badge">3</span>
-        </a>
-        <a href="/sync" className="header-action-btn">
-          🔔 消息
-          <span className="badge">99+</span>
-        </a>
-        <a href="/sync" className="header-action-btn">
-          📥 导出
-        </a>
-        <div style={{ color: 'var(--border)', fontSize: 16, margin: '0 4px' }}>|</div>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '0 8px' }}>
-          👤 管理员
-        </span>
+      <div className="top-header-right" style={{ gap: 12 }}>
+        <UserSwitcher />
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>🐋 鲸天系统</span>
       </div>
     </header>
   );
