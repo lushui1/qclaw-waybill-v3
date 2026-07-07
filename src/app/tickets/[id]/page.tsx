@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { generateApprovalSuggestion } from '@/lib/ai-classifier';
 
 const STATUS_LABELS: Record<string, string> = {
   pending_approval: '待审批', level1_approving: '一级审批中', level2_approving: '二级审批中',
@@ -27,6 +28,13 @@ export default function TicketDetailPage() {
   const [amount, setAmount] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+
+  // AI 审批建议
+  const aiSuggestion = ticket ? generateApprovalSuggestion(
+    ticket.anomalyType,
+    Number(ticket.estimatedAmount || 0),
+    ticket.approvals?.length || 0
+  ) : null;
 
   const fetchTicket = () => {
     fetch(`/api/tickets?searchId=${ticketId}`).then(r => r.json()).then(data => {
@@ -215,6 +223,26 @@ export default function TicketDetailPage() {
       {canOperate && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-title">审批操作</div>
+
+          {/* AI 建议审批意见 */}
+          {aiSuggestion && (
+            <div style={{
+              padding: 12, marginBottom: 12, borderRadius: 8,
+              background: 'var(--primary-light)', border: '1px solid var(--primary)',
+              fontSize: 13,
+            }}>
+              <div style={{ fontWeight: 500, color: 'var(--primary-dark)' }}>
+                🤖 AI 建议审批意见 — 需人工确认
+              </div>
+              <div style={{ marginTop: 4, lineHeight: 1.8 }}>
+                {aiSuggestion.suggestion}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                依据: {aiSuggestion.reason}（参考了 {aiSuggestion.basedOn} 条历史记录）
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: 12 }}>
             <textarea className="input" placeholder="审批意见（必填）" value={comment}
               onChange={e => setComment(e.target.value)} rows={3} />
