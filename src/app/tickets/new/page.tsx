@@ -80,18 +80,12 @@ export default function NewTicketPage() {
 
     setSubmitting(true);
     try {
-      // 先查 waybill
-      const wbRes = await fetch(`/api/waybills?keyword=${encodeURIComponent(waybillCode)}&pageSize=1`);
-      const wbData = await wbRes.json();
-      const waybill = wbData.waybills?.[0];
-      if (!waybill) { toast.error('运单不存在，请先同步数据'); setSubmitting(false); return; }
-
-      // 创建工单
+      // 创建工单（直接传运单号，后端调 V2 接口校验）
       const res = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          waybillId: waybill.id,
+          waybillCode: waybillCode.trim(),
           anomalyType,
           description,
           amount: 0,

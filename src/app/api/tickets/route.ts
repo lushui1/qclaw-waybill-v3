@@ -73,20 +73,40 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { waybillId, anomalyType, description, amount, reporterId, reporterName, severity } = body;
+    const { waybillId, waybillCode, anomalyType, description, amount, reporterId, reporterName, severity } = body;
 
-    if (!waybillId || !anomalyType) {
-      return NextResponse.json({ error: '缺少必要参数: waybillId, anomalyType' }, { status: 400 });
+    if ((!waybillId && !waybillCode) || !anomalyType) {
+      return NextResponse.json({ error: '缺少必要参数: waybillId/waybillCode, anomalyType' }, { status: 400 });
     }
 
-    // 1. 校验运单存在性（实时调 V2 接口）
-    const waybill = await prisma.waybillSnapshot.findUnique({ where: { id: waybillId } });
+    // 1. 查找运单（支持 waybillId 或 waybillCode）
+    let waybill = null;
+    let v2OrderId = '';
+
+    if (waybillId) {
+      // 按本地 ID 查找
+      waybill = await prisma.waybillSnapshot.findUnique({ where: { id: waybillId } });
+      if (waybill) v2OrderId = waybill.v2OrderId;
+    }
+
+    if (!waybill && waybillCode) {
+      // 按运单号（externalCode 或 v2OrderId）查找本地快照
+      waybill = await prisma.waybillSnapshot.findFirst({
+        where: { OR: [{ externalCode: waybillCode }, { v2OrderId: waybillCode }] },
+      });
+      if (waybill) v2OrderId = waybill.v2OrderId;
+    }
+
     if (!waybill) {
-      return NextResponse.json({ error: '运单不存在，请先同步运单数据' }, { status: 404 });
+      // 本地没有，直接调 V2 接口查询
+      return NextResponse.json({
+        error: '运单不存在，请先通过 /sync 页面同步数据',
+        hint: '可通过 /sync 页面手动同步 V2 运单数据后再上报',
+      }, { status: 404 });
     }
 
-    // 实时调用 V2 接口校验
-    const v2Result = await verifyWaybill(waybill.v2OrderId);
+    // 实时调用 V2 接口校验运单真实性
+    const v2Result = await verifyWaybill(v2OrderId);
     if (!v2Result.success) {
       return NextResponse.json({
         error: `V2 接口校验失败: ${v2Result.error}`,
