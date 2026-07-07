@@ -86,10 +86,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (!skuVerified) {
-      // 最后尝试：调 V2 列表接口搜索该运单+SKU
+      // 最后尝试：调 V2 列表接口搜索（加大 pageSize 确保覆盖）
       try {
         const searchRes = await fetch(
-          `${process.env.V2_API_BASE_URL || 'https://ideakaoshi.vercel.app'}/api/v2/orders?pageSize=100`,
+          `${process.env.V2_API_BASE_URL || 'https://ideakaoshi.vercel.app'}/api/v2/orders?pageSize=500`,
           { headers: { 'x-api-key': process.env.V2_API_KEY || 'dev-key' } }
         );
         const searchData = await searchRes.json();
