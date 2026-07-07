@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. 生成工单号（使用数据库事务保证唯一递增）
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '');
     const lastTicket = await prisma.ticket.findFirst({
       where: { ticketNo: { startsWith: `TKT-${today}` } },
       orderBy: { ticketNo: 'desc' },

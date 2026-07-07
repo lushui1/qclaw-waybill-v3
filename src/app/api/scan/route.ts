@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
       const unitPrice = 100;
       const estimatedAmount = actualQty ? Math.abs((expectedQty || 0) - actualQty) * unitPrice : 0;
 
-      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '');
       // 用当天最大序号+1，替代 count 防竞态
       const lastTicket = await prisma.ticket.findFirst({
         where: { ticketNo: { startsWith: `TKT-${today}` } },
