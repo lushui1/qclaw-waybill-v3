@@ -105,11 +105,12 @@ GET /api/v2/orders/:id/skus?skuCode=<skuCode>
 
 ```
 GET /api/v2/orders?page=1&pageSize=50&status=active
+GET /api/v2/orders?externalCode=PS2605290247&skuCode=ZBWP0185  (精确匹配)
 ```
 
-**用途：** 本地快照表的初始化或增量同步
+**用途：** 本地快照表的初始化或增量同步 / 扫描时精确查找运单+SKU匹配
 
-**查询参数：**
+**查询参数（分页模式）：**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -117,7 +118,11 @@ GET /api/v2/orders?page=1&pageSize=50&status=active
 | pageSize | number | 否 | 每页条数，默认 50，最大 100 |
 | status | string | 否 | 运单状态筛选 |
 
-**响应示例 (200)：**
+**查询参数（精确匹配模式）：**
+- 同时传入 `externalCode` 和 `skuCode` 时进入精确匹配模式
+- 返回 `{ found: boolean, order: { id, externalCode, skuCode, ... } | null }`
+
+**响应示例 (200，分页模式)：**
 
 ```json
 {
