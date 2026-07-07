@@ -105,6 +105,17 @@ export default function ScanPage() {
   };
 
   const handleScan = async () => {
+    // 每次扫描前重新从 localStorage 读取当前用户（顶栏切换后同步）
+    const savedId = localStorage.getItem('currentUser');
+    if (savedId && currentUser?.id !== savedId) {
+      try {
+        const usersRes = await fetch('/api/users');
+        const users = await usersRes.json();
+        const matched = users.find((u: any) => u.id === savedId);
+        if (matched) setCurrentUser(matched);
+      } catch {}
+    }
+    const user = currentUser;
     const firstWaybill = selectedWaybill?._allWaybills?.[0];
     const actualId = firstWaybill?.id || v2OrderId;
     if (!actualId || !selectedSku) { toast.error('请填写完整扫描信息（运单和SKU为必填）'); return; }
