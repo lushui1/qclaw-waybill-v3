@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 export default function SyncMonitorPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -10,6 +11,8 @@ export default function SyncMonitorPage() {
   const [recentStats, setRecentStats] = useState<any>({ total: 0, failed: 0 });
   const [syncing, setSyncing] = useState(false);
   const [filterSuccess, setFilterSuccess] = useState<string>('');
+  const [lastSyncResult, setLastSyncResult] = useState<any>(null);
+  const [waybillCount, setWaybillCount] = useState(0);
 
   const fetchLogs = () => {
     const params = new URLSearchParams({ page: String(page), pageSize: '20' });
@@ -22,13 +25,26 @@ export default function SyncMonitorPage() {
     }).catch(() => {});
   };
 
-  useEffect(() => { fetchLogs(); }, [page, filterSuccess]);
+  useEffect(() => { fetchLogs(); fetchWaybillCount(); }, [page, filterSuccess]);
+
+  const fetchWaybillCount = async () => {
+    try {
+      const r = await fetch('/api/waybills?pageSize=1');
+      const d = await r.json();
+      if (d.total !== undefined) setWaybillCount(d.total);
+    } catch {}
+  };
 
   const handleSync = async () => {
     setSyncing(true);
+    setLastSyncResult(null);
     try {
-      await fetch('/api/sync', { method: 'POST', body: JSON.stringify({ page: 1 }) });
+      const r = await fetch('/api/sync', { method: 'POST', body: JSON.stringify({ page: 1 }) });
+      const d = await r.json();
+      setLastSyncResult(d);
       fetchLogs();
+      fetchWaybillCount();
+      if (d.synced !== undefined) toast.success(`同步完成，已处理 ${d.synced} 条`);
     } catch {}
     setSyncing(false);
   };
@@ -73,6 +89,10 @@ export default function SyncMonitorPage() {
         <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
           <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--error)' }}>{recentStats.failed}</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>24h 失败</div>
+        </div>
+        <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
+          <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{waybillCount}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>本地快照</div>
         </div>
       </div>
 
