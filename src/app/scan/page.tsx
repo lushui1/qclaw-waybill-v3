@@ -147,17 +147,25 @@ export default function ScanPage() {
       <div className="filter-bar">
         <div className="filter-row">
           <div className="filter-group" style={{ minWidth: 220 }}>
-            <label>运单</label>
-            <select className="input" value={selectedWaybill ? (selectedWaybill.externalCode || selectedWaybill.v2OrderId) : ''} onChange={handleWaybillChange}>
-              <option value="">选择运单</option>
+            <label>运单（支持输入或选择）</label>
+            <input className="input" list="wbList" placeholder="输入运单号或从列表选择"
+              value={selectedWaybill ? (selectedWaybill.externalCode || selectedWaybill.v2OrderId) : v2OrderId}
+              onChange={e => {
+                const val = e.target.value;
+                setV2OrderId(val);
+                const matched = waybills.find(w => (w.externalCode || w.v2OrderId) === val);
+                setSelectedWaybill(matched || null);
+              }} />
+            <datalist id="wbList">
               {waybills.map((w: any) => (
-                <option key={w.id} value={w.externalCode || w.v2OrderId}>{w.externalCode || w.v2OrderId}</option>
+                <option key={w.id} value={w.externalCode || w.v2OrderId} />
               ))}
-            </select>
+            </datalist>
           </div>
           <div className="filter-group" style={{ minWidth: 160 }}>
             <label>V2 运单号</label>
-            <input className="input" placeholder="自动带出" value={v2OrderId} readOnly />
+            <input className="input" placeholder="可手动输入" value={v2OrderId}
+              onChange={e => setV2OrderId(e.target.value)} />
           </div>
           <div className="filter-group" style={{ minWidth: 180 }}>
             <label>SKU 编码</label>
