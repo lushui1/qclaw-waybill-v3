@@ -20,7 +20,11 @@ export default function ScanPage() {
 
   useEffect(() => {
     fetch('/api/users').then(r => r.json()).then(users => {
-      if (users.length > 0) setCurrentUser(users[0]);
+      if (users.length > 0) {
+        const saved = localStorage.getItem('currentUser');
+        const found = saved ? users.find((u: any) => u.id === saved) : null;
+        setCurrentUser(found || users[0]);
+      }
     }).catch(() => {});
     fetchWaybills();
     fetchRecentScans();
