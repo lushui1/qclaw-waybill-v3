@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 export default function ScanPage() {
   const [waybills, setWaybills] = useState<any[]>([]);
@@ -97,8 +98,8 @@ export default function ScanPage() {
   const handleScan = async () => {
     const firstWaybill = selectedWaybill?._allWaybills?.[0];
     const actualId = firstWaybill?.id || v2OrderId;
-    if (!actualId || !selectedSku || !actualQty) return alert('请填写完整扫描信息');
-    if (!currentUser) return alert('请先配置用户');
+    if (!actualId || !selectedSku || !actualQty) return toast('请填写完整扫描信息');
+    if (!currentUser) return toast('请先配置用户');
 
     setScanning(true);
     setResult(null);
@@ -124,7 +125,7 @@ export default function ScanPage() {
       setActualQty('');
       setExpectedQty('');
     } catch (err: any) {
-      alert(err.message);
+      toast(err.message);
     } finally {
       setScanning(false);
     }

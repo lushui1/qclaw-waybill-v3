@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { classifyAnomaly, getTopSuggestion } from '@/lib/ai-classifier';
+import { toast } from 'sonner';
 
 const ANOMALY_TYPES = [
   { value: 'lost', label: '丢件', category: 'logistics' },
@@ -40,7 +41,7 @@ export default function NewTicketPage() {
   }, []);
 
   const handleAiClassify = async () => {
-    if (!description.trim()) return alert('请先填写异常描述');
+    if (!description.trim()) return toast('请先填写异常描述');
     setAiLoading(true);
     try {
       const suggestion = await getTopSuggestion(description);
@@ -65,17 +66,17 @@ export default function NewTicketPage() {
       if (data.waybills && data.waybills.length > 0) {
         setWaybillVerified(true);
       } else {
-        alert('未找到该运单，请先同步数据');
+        toast('未找到该运单，请先同步数据');
         setWaybillVerified(false);
       }
     } catch {
-      alert('校验失败');
+      toast('校验失败');
     }
   };
 
   const handleSubmit = async () => {
-    if (!waybillCode.trim() || !description.trim()) return alert('请填写运单号和异常描述');
-    if (!currentUser) return alert('请先选择用户');
+    if (!waybillCode.trim() || !description.trim()) return toast('请填写运单号和异常描述');
+    if (!currentUser) return toast('请先选择用户');
 
     setSubmitting(true);
     try {
@@ -83,7 +84,7 @@ export default function NewTicketPage() {
       const wbRes = await fetch(`/api/waybills?keyword=${encodeURIComponent(waybillCode)}&pageSize=1`);
       const wbData = await wbRes.json();
       const waybill = wbData.waybills?.[0];
-      if (!waybill) return alert('运单不存在，请先同步数据');
+      if (!waybill) return toast('运单不存在，请先同步数据');
 
       // 创建工单
       const res = await fetch('/api/tickets', {
@@ -103,7 +104,7 @@ export default function NewTicketPage() {
       if (data.error) throw new Error(data.error);
       router.push(`/tickets/${data.id}`);
     } catch (err: any) {
-      alert(err.message);
+      toast(err.message);
     }
     setSubmitting(false);
   };

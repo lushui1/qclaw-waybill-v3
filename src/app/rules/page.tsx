@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 const SEVERITY_LABELS: Record<string, string> = { low: '低', medium: '中', high: '高', critical: '严重' };
 const SUBTYPE_LABELS: Record<string, string> = {
@@ -71,8 +72,8 @@ export default function RulesPage() {
         }),
       });
       if (res.ok) { setEditingRule(null); setShowForm(false); fetchRules(); }
-      else { const data = await res.json(); alert(data.error || '保存失败'); }
-    } catch (err: any) { alert(err.message); }
+      else { const data = await res.json(); toast(data.error || '保存失败'); }
+    } catch (err: any) { toast(err.message); }
     finally { setSaving(false); }
   };
 
@@ -81,8 +82,8 @@ export default function RulesPage() {
     try {
       const res = await fetch(`/api/rules?id=${id}`, { method: 'DELETE' });
       if (res.ok) fetchRules();
-      else { const d = await res.json(); alert(d.error || '删除失败'); }
-    } catch (err: any) { alert(err.message); }
+      else { const d = await res.json(); toast(d.error || '删除失败'); }
+    } catch (err: any) { toast(err.message); }
   };
 
   const handleToggle = async (rule: any) => {

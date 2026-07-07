@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { generateApprovalSuggestion } from '@/lib/ai-classifier';
+import { toast } from 'sonner';
 
 const STATUS_LABELS: Record<string, string> = {
   pending_approval: '待审批', level1_approving: '一级审批中', level2_approving: '二级审批中',
@@ -71,7 +72,7 @@ export default function TicketDetailPage() {
   useEffect(() => { fetchTicket(); fetchUser(); }, [ticketId]);
 
   const handleApprove = async () => {
-    if (!currentUser) return alert('请先配置用户');
+    if (!currentUser) return toast('请先配置用户');
     if (!confirm('确认通过此工单？审批通过后将进入下一环节（执行联动）。')) return;
     setActionLoading('approve');
     try {
@@ -87,12 +88,12 @@ export default function TicketDetailPage() {
       if (data.error) throw new Error(data.error);
       fetchTicket();
       setComment(''); setAmount('');
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) { toast(err.message); }
     finally { setActionLoading(''); }
   };
 
   const handleReject = async () => {
-    if (!currentUser) return alert('请先配置用户');
+    if (!currentUser) return toast('请先配置用户');
     if (!confirm('确认拒绝此工单？拒绝后将允许上报人重新提交。')) return;
     setActionLoading('reject');
     try {
@@ -108,12 +109,12 @@ export default function TicketDetailPage() {
       if (data.error) throw new Error(data.error);
       fetchTicket();
       setComment('');
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) { toast(err.message); }
     finally { setActionLoading(''); }
   };
 
   const handleFastRelease = async () => {
-    if (!currentUser) return alert('请先配置用户');
+    if (!currentUser) return toast('请先配置用户');
     if (!confirm('确认快速放行此工单？此操作将跳过完整审批流程。')) return;
     setActionLoading('fast_release');
     try {
@@ -129,7 +130,7 @@ export default function TicketDetailPage() {
       if (data.error) throw new Error(data.error);
       fetchTicket();
       setComment('');
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) { toast(err.message); }
     finally { setActionLoading(''); }
   };
 
@@ -146,7 +147,7 @@ export default function TicketDetailPage() {
   const isAdmin = currentUser?.role === 'admin';
 
   const handleReassign = async () => {
-    if (!currentUser) return alert('请先配置用户');
+    if (!currentUser) return toast('请先配置用户');
     const newApprover = prompt('输入新的审批人 ID（如: l1_app1 / l2_app1）：');
     if (!newApprover) return;
     const newName = prompt('输入新的审批人名称：');
@@ -168,8 +169,8 @@ export default function TicketDetailPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       fetchTicket();
-      alert('✅ 转交成功');
-    } catch (err: any) { alert(err.message); }
+      toast('✅ 转交成功');
+    } catch (err: any) { toast(err.message); }
     finally { setActionLoading(''); }
   };
 
