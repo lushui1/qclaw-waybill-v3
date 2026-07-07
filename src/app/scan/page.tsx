@@ -178,7 +178,7 @@ export default function ScanPage() {
           <div className="filter-group" style={{ minWidth: 100 }}>
             <label>应发数量</label>
             <input className="input" type="number" placeholder="0" value={expectedQty}
-              onChange={e => setExpectedQty(e.target.value)} readOnly />
+              onChange={e => setExpectedQty(e.target.value)} />
           </div>
           <div className="filter-group" style={{ minWidth: 100 }}>
             <label>实际数量</label>

@@ -45,10 +45,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '缺少必要参数: waybillId, skuCode' }, { status: 400 });
     }
 
-    // 1. 获取运单快照（支持 id 和 v2OrderId 两种查询）
+    // 1. 获取运单快照（支持 id / v2OrderId / externalCode 三种查询）
     let waybill = await prisma.waybillSnapshot.findUnique({ where: { id: waybillId } });
     if (!waybill) {
       waybill = await prisma.waybillSnapshot.findUnique({ where: { v2OrderId: waybillId } });
+    }
+    if (!waybill) {
+      // 按 externalCode（外部运单号）查找第一个匹配的快照
+      const byCode = await prisma.waybillSnapshot.findFirst({
+        where: { externalCode: waybillId },
+        orderBy: { lastSyncedAt: 'desc' },
+      });
+      if (byCode) waybill = byCode;
     }
     if (!waybill) {
       return NextResponse.json({ error: '运单不存在，请先同步数据' }, { status: 404 });
