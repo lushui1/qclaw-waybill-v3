@@ -107,7 +107,7 @@ export default function ScanPage() {
   const handleScan = async () => {
     const firstWaybill = selectedWaybill?._allWaybills?.[0];
     const actualId = firstWaybill?.id || v2OrderId;
-    if (!actualId || !selectedSku || !actualQty) { toast.error('请填写完整扫描信息'); return; }
+    if (!actualId || !selectedSku) { toast.error('请填写完整扫描信息（运单和SKU为必填）'); return; }
     if (!currentUser) { toast.error('请先配置用户'); return; }
 
     setScanning(true);
@@ -163,7 +163,7 @@ export default function ScanPage() {
       <div className="filter-bar">
         <div className="filter-row">
           <div className="filter-group" style={{ minWidth: 220 }}>
-            <label>运单（支持输入或选择）</label>
+            <label><span style={{ color: 'var(--error)' }}>*</span> 运单（支持输入或选择）</label>
             <input className="input" list="wbList" placeholder="输入运单号或从列表选择"
               value={selectedWaybill ? (selectedWaybill.externalCode || selectedWaybill.v2OrderId) : v2OrderId}
               onChange={e => {
@@ -184,7 +184,7 @@ export default function ScanPage() {
               onChange={e => setV2OrderId(e.target.value)} />
           </div>
           <div className="filter-group" style={{ minWidth: 180 }}>
-            <label>SKU 编码</label>
+            <label><span style={{ color: 'var(--error)' }}>*</span> SKU 编码</label>
             <input className="input" placeholder="手动输入 SKU"
               value={selectedSku} onChange={e => setSelectedSku(e.target.value.toUpperCase())}
               onKeyDown={handleKeyDown} autoFocus />
