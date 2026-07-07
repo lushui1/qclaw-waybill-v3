@@ -86,22 +86,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (!skuVerified) {
-      // 最后尝试：调 V2 列表接口搜索（加大 pageSize 确保覆盖）
+      // 最后尝试：调 V2 API 精确匹配查询 externalCode + skuCode
       try {
-        const searchRes = await fetch(
-          `${process.env.V2_API_BASE_URL || 'https://ideakaoshi.vercel.app'}/api/v2/orders?pageSize=500`,
-          { headers: { 'x-api-key': process.env.V2_API_KEY || 'dev-key' } }
-        );
-        const searchData = await searchRes.json();
-        if (searchData.orders) {
-          // 在返回的 orders 中找匹配 externalCode + skuCode 的
-          const match = searchData.orders.find(
-            (o: any) => o.externalCode === waybill.externalCode && o.skuCode === skuCode
-          );
-          if (match) {
-            const finalCheck = await verifySkuBelongsToWaybill(match.id, skuCode);
-            if (finalCheck.success && finalCheck.data?.exists) skuVerified = true;
-          }
+        const lookupUrl = `${process.env.V2_API_BASE_URL || 'https://ideakaoshi.vercel.app'}/api/v2/orders?externalCode=${encodeURIComponent(waybill.externalCode || '')}&skuCode=${encodeURIComponent(skuCode)}`;
+        const lookupRes = await fetch(lookupUrl, {
+          headers: { 'x-api-key': process.env.V2_API_KEY || 'dev-key' }
+        });
+        const lookupData = await lookupRes.json();
+        if (lookupData.found && lookupData.order) {
+          const finalCheck = await verifySkuBelongsToWaybill(lookupData.order.id, skuCode);
+          if (finalCheck.success && finalCheck.data?.exists) skuVerified = true;
         }
       } catch {}
     }
