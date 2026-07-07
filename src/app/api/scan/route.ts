@@ -55,49 +55,33 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. 实时调用 V2 接口校验 SKU 归属
-    // 先查看本地 skuSummary 是否包含该 SKU
-    let matchedV2OrderId = waybill.v2OrderId;
-    let skuFound = false;
-    if (waybill.skuSummary) {
-      try {
-        const skus = JSON.parse(waybill.skuSummary);
-        if (Array.isArray(skus)) {
-          skuFound = skus.some((s: any) => s.skuCode === skuCode);
-        }
-      } catch {}
-    }
-    // 如果本地 skuSummary 不匹配，可能是因为同 externalCode 下不同 v2Order 的 SKU
-    // 查找同 externalCode 的其他 WaybillSnapshot
-    if (!skuFound && waybill.externalCode) {
+    // 收集所有候选 v2OrderId（当前 + 同 externalCode 的兄弟）
+    const candidateIds = [waybill.v2OrderId];
+    if (waybill.externalCode) {
       const siblings = await prisma.waybillSnapshot.findMany({
         where: { externalCode: waybill.externalCode, id: { not: waybill.id } },
-        select: { v2OrderId: true, skuSummary: true },
+        select: { v2OrderId: true },
       });
-      for (const sib of siblings) {
-        if (sib.skuSummary) {
-          try {
-            const skus = JSON.parse(sib.skuSummary);
-            if (Array.isArray(skus) && skus.some((s: any) => s.skuCode === skuCode)) {
-              matchedV2OrderId = sib.v2OrderId;
-              skuFound = true;
-              break;
-            }
-          } catch {}
-        }
+      siblings.forEach(s => { if (!candidateIds.includes(s.v2OrderId)) candidateIds.push(s.v2OrderId); });
+    }
+
+    // 逐个尝试，任一成功即可
+    let skuVerified = false;
+    let lastSkuError = '';
+    for (const vid of candidateIds) {
+      const skuResult = await verifySkuBelongsToWaybill(vid, skuCode);
+      if (skuResult.success && skuResult.data?.exists) {
+        skuVerified = true;
+        break;
       }
+      if (!skuResult.success) lastSkuError = skuResult.error || '未知错误';
     }
 
-    // 用匹配到的 v2OrderId 去 V2 接口校验
-    const skuResult = await verifySkuBelongsToWaybill(matchedV2OrderId, skuCode);
-    if (!skuResult.success) {
+    if (!skuVerified) {
       return NextResponse.json({
-        error: `SKU 校验失败: ${skuResult.error}`,
-        requestId: skuResult.requestId,
-      }, { status: 502 });
-    }
-
-    if (skuResult.data && !skuResult.data.exists) {
-      return NextResponse.json({ error: `SKU "${skuCode}" 不属于该运单` }, { status: 400 });
+        error: `SKU "${skuCode}" 不属于该运单（已校验 ${candidateIds.length} 个关联运单）`,
+        detail: lastSkuError,
+      }, { status: 400 });
     }
 
     // 3. 检查扫描幂等性：同一运单同一 SKU 存在未关闭品控工单
