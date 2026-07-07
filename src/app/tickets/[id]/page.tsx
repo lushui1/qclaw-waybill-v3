@@ -88,7 +88,8 @@ export default function TicketDetailPage() {
       if (data.error) throw new Error(data.error);
       fetchTicket();
       setComment(''); setAmount('');
-    } catch (err: any) { toast(err.message); }
+      toast.success('✅ 审批通过');
+    } catch (err: any) { toast.error(err.message); }
     finally { setActionLoading(''); }
   };
 
@@ -109,7 +110,8 @@ export default function TicketDetailPage() {
       if (data.error) throw new Error(data.error);
       fetchTicket();
       setComment('');
-    } catch (err: any) { toast(err.message); }
+      toast.success('✅ 已拒绝');
+    } catch (err: any) { toast.error(err.message); }
     finally { setActionLoading(''); }
   };
 
