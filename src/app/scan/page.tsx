@@ -87,10 +87,11 @@ export default function ScanPage() {
     }
   };
 
-  // SKU 选择（输入 + datalist 自动提示）
+  // SKU 选择（输入 + 自动更新应发数量）
   const handleSkuSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase();
     setSelectedSku(val);
+    // 找到匹配的 SKU 自动填充应发数量
     const matched = skuOptions.find(s => s.skuCode === val);
     if (matched) setExpectedQty(matched.qty || '');
   };
@@ -215,7 +216,12 @@ export default function ScanPage() {
             )}
             {result.ticket && (
               <div style={{ flex: 1, padding: 16, borderRadius: 8, background: 'var(--primary-light)', border: '1px solid #AED6F1' }}>
-                <div style={{ fontWeight: 500, fontSize: 13 }}>📋 已自动创建异常工单</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontWeight: 500, fontSize: 13 }}>📋 已自动创建异常工单</span>
+                  <span style={{ fontSize: 11, background: 'var(--primary)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
+                    📷 扫描触发
+                  </span>
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>工单号: {result.ticket.ticketNo}</div>
                 <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => router.push(`/tickets/${result.ticket.id}`)}>查看工单</button>
               </div>
