@@ -86,20 +86,21 @@ export async function POST(req: NextRequest) {
     }
 
     if (!skuVerified) {
-      // 最后尝试：直接查 V2 的 orders 表（同数据库），用 externalCode 找 SKU
+      // 最后尝试：直查 orders 表（通过 Prisma $queryRawUnsafe）
       try {
-        const directHit = await prisma.$queryRawUnsafe<Array<Record<string, any>>>(
-          `SELECT id FROM orders WHERE external_code = $1 AND sku_code = $2 LIMIT 1`,
-          waybill.externalCode, skuCode
-        );
-        if (directHit.length > 0) {
-          // 用找到的 id 去 V2 API 正式校验
-          const finalCheck = await verifySkuBelongsToWaybill(String(directHit[0].id), skuCode);
+        const query = `SELECT id, sku_code FROM orders WHERE external_code = '${waybill.externalCode?.replace(/'/g, "''")}' AND sku_code = '${skuCode.replace(/'/g, "''")}' LIMIT 1`;
+        const directHit = await prisma.$queryRawUnsafe(query);
+        const rows = directHit as any[];
+        if (rows.length > 0) {
+          const foundId = String(rows[0].id);
+          const finalCheck = await verifySkuBelongsToWaybill(foundId, skuCode);
           if (finalCheck.success && finalCheck.data?.exists) {
             skuVerified = true;
           }
         }
-      } catch {}
+      } catch (e: any) {
+        console.error('[Scan] 直查orders表失败:', e.message);
+      }
     }
 
     if (!skuVerified) {
