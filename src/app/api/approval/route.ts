@@ -19,13 +19,16 @@ export async function GET(req: NextRequest) {
       status: { in: ['pending_approval', 'level1_approving', 'level2_approving'] },
     };
 
-    if (approverRole === 'level1_approver' || approverRole === 'admin') {
+    if (approverRole === 'level1_approver') {
+      // 一级审批人：只看第1级
       where.currentLevel = 1;
       where.status = { in: ['pending_approval', 'level1_approving'] };
     } else if (approverRole === 'level2_approver') {
+      // 二级审批人：只看第2级
       where.currentLevel = 2;
-      where.status = 'level2_approving';
+      where.status = { in: ['pending_approval', 'level2_approving'] };
     }
+    // admin 不追加过滤，能看到全部层级
 
     // 上报人不能看到自己提交的工单
     if (approverId) {
