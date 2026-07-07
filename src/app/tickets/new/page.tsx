@@ -39,11 +39,11 @@ export default function NewTicketPage() {
     }).catch(() => {});
   }, []);
 
-  const handleAiClassify = () => {
+  const handleAiClassify = async () => {
     if (!description.trim()) return alert('请先填写异常描述');
     setAiLoading(true);
     try {
-      const suggestion = getTopSuggestion(description);
+      const suggestion = await getTopSuggestion(description);
       if (suggestion) {
         setAiResult(suggestion);
         setAnomalyType(suggestion.type);

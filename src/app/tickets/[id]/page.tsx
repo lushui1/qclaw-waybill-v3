@@ -28,13 +28,18 @@ export default function TicketDetailPage() {
   const [amount, setAmount] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [aiSuggestion, setAiSuggestion] = useState<{ suggestion: string; reason: string; basedOn: number; fromLlm: boolean } | null>(null);
 
-  // AI 审批建议
-  const aiSuggestion = ticket ? generateApprovalSuggestion(
-    ticket.anomalyType,
-    Number(ticket.estimatedAmount || 0),
-    ticket.approvals?.length || 0
-  ) : null;
+  // 异步获取 AI 审批建议
+  useEffect(() => {
+    if (ticket) {
+      generateApprovalSuggestion(
+        ticket.anomalyType,
+        Number(ticket.estimatedAmount || 0),
+        ticket.approvals?.length || 0
+      ).then(setAiSuggestion).catch(() => {});
+    }
+  }, [ticket]);
 
   const fetchTicket = () => {
     fetch(`/api/tickets?searchId=${ticketId}`).then(r => r.json()).then(data => {
