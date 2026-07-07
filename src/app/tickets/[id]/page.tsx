@@ -30,6 +30,7 @@ export default function TicketDetailPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [aiSuggestion, setAiSuggestion] = useState<{ suggestion: string; reason: string; basedOn: number; fromLlm: boolean } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // 是否展示审批操作区（审批成功后收起）
   const [showApproval, setShowApproval] = useState(true);
@@ -37,11 +38,12 @@ export default function TicketDetailPage() {
   // 异步获取 AI 审批建议
   useEffect(() => {
     if (ticket) {
+      setAiLoading(true);
       generateApprovalSuggestion(
         ticket.anomalyType,
         Number(ticket.estimatedAmount || 0),
         ticket.approvals?.length || 0
-      ).then(setAiSuggestion).catch(() => {});
+      ).then(res => { setAiSuggestion(res); setAiLoading(false); }).catch(() => setAiLoading(false));
     }
   }, [ticket]);
 
@@ -243,7 +245,13 @@ export default function TicketDetailPage() {
           <div className="card-title">审批操作</div>
 
           {/* AI 建议审批意见 */}
-          {aiSuggestion && (
+          {aiLoading && (
+            <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: 'var(--primary-light)', border: '1px solid var(--primary)', fontSize: 13 }}>
+              <div style={{ fontWeight: 500, color: 'var(--primary-dark)' }}>🤖 AI 正在分析...</div>
+              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>正在调用大模型生成审批建议</div>
+            </div>
+          )}
+          {aiSuggestion && !aiLoading && (
             <div style={{
               padding: 12, marginBottom: 12, borderRadius: 8,
               background: 'var(--primary-light)', border: '1px solid var(--primary)',

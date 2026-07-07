@@ -48,15 +48,26 @@ export async function POST(
     const machine = new TicketStateMachine(ticket.status as any);
 
     // 6. 判断下一状态（使用状态机静态方法，消除重复逻辑）
+    // 注意：pending_approval 必须先到 level1_approving，不能直接到 executing
+    let actualStatus = ticket.status;
+    let actualNextLevel = ticket.currentLevel;
+
+    if (ticket.status === 'pending_approval') {
+      // 先推进到 level1_approving
+      actualStatus = 'level1_approving';
+    }
+
     const level1MaxAmount = await getLevel1MaxAmount();
     const { nextStatus, nextLevel } = TicketStateMachine.approveTransition(
       Number(amount ?? ticket.estimatedAmount),
-      ticket.currentLevel,
+      actualNextLevel,
       { level1MaxAmount }
     );
 
-    if (!machine.canTransition(nextStatus as any)) {
-      return NextResponse.json({ error: `无法从 ${ticket.status} 过渡到 ${nextStatus}` }, { status: 409 });
+    // 用实际状态校验
+    const machineForCheck = new TicketStateMachine(actualStatus as any);
+    if (!machineForCheck.canTransition(nextStatus as any)) {
+      return NextResponse.json({ error: `无法从 ${actualStatus} 过渡到 ${nextStatus}` }, { status: 409 });
     }
 
     // 7. 计算下一级超时时间
