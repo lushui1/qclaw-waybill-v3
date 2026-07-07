@@ -11,6 +11,10 @@ export default function ScanPage() {
   const [selectedSku, setSelectedSku] = useState('');
   const [expectedQty, setExpectedQty] = useState('');
   const [actualQty, setActualQty] = useState('');
+  const [qcAppearance, setQcAppearance] = useState('');
+  const [qcSpec, setQcSpec] = useState('');
+  const [qcLabel, setQcLabel] = useState('');
+  const [qcBatch, setQcBatch] = useState('');
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -120,6 +124,12 @@ export default function ScanPage() {
           operatorName: currentUser.name,
           expectedQty: parseInt(expectedQty) || 0,
           actualQty: parseInt(actualQty) || 0,
+          extra: {
+            appearance: qcAppearance,
+            spec: qcSpec,
+            label: qcLabel,
+            batch: qcBatch,
+          },
         }),
       });
       const data = await res.json();
@@ -189,6 +199,30 @@ export default function ScanPage() {
             <input className="input" type="number" placeholder="0" value={actualQty}
               onChange={e => setActualQty(e.target.value)} onKeyDown={handleKeyDown} />
           </div>
+        </div>
+        <div className="filter-row" style={{ marginTop: 8 }}>
+          <div className="filter-group" style={{ minWidth: 160 }}>
+            <label>外观描述</label>
+            <input className="input" placeholder="如: 包装破损、变形" value={qcAppearance}
+              onChange={e => setQcAppearance(e.target.value)} />
+          </div>
+          <div className="filter-group" style={{ minWidth: 160 }}>
+            <label>规格检查</label>
+            <input className="input" placeholder="如: 规格不符、型号错误" value={qcSpec}
+              onChange={e => setQcSpec(e.target.value)} />
+          </div>
+          <div className="filter-group" style={{ minWidth: 160 }}>
+            <label>标签检查</label>
+            <input className="input" placeholder="如: 标签模糊、条码错误" value={qcLabel}
+              onChange={e => setQcLabel(e.target.value)} />
+          </div>
+          <div className="filter-group" style={{ minWidth: 160 }}>
+            <label>批次检查</label>
+            <input className="input" placeholder="如: 临期、过期" value={qcBatch}
+              onChange={e => setQcBatch(e.target.value)} />
+          </div>
+        </div>
+        <div className="filter-row" style={{ marginTop: 12 }}>
           <div className="filter-actions">
             <button className="btn btn-primary" onClick={handleScan} disabled={scanning}>
               {scanning ? '检测中...' : '📷 扫描检测'}
