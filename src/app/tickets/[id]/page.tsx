@@ -72,7 +72,7 @@ export default function TicketDetailPage() {
   useEffect(() => { fetchTicket(); fetchUser(); }, [ticketId]);
 
   const handleApprove = async () => {
-    if (!currentUser) return toast('请先配置用户');
+    if (!currentUser) { toast.error('请先配置用户'); return; }
     if (!confirm('确认通过此工单？审批通过后将进入下一环节（执行联动）。')) return;
     setActionLoading('approve');
     try {
@@ -93,7 +93,7 @@ export default function TicketDetailPage() {
   };
 
   const handleReject = async () => {
-    if (!currentUser) return toast('请先配置用户');
+    if (!currentUser) { toast.error('请先配置用户'); return; }
     if (!confirm('确认拒绝此工单？拒绝后将允许上报人重新提交。')) return;
     setActionLoading('reject');
     try {
@@ -114,7 +114,7 @@ export default function TicketDetailPage() {
   };
 
   const handleFastRelease = async () => {
-    if (!currentUser) return toast('请先配置用户');
+    if (!currentUser) { toast.error('请先配置用户'); return; }
     if (!confirm('确认快速放行此工单？此操作将跳过完整审批流程。')) return;
     setActionLoading('fast_release');
     try {
@@ -147,7 +147,7 @@ export default function TicketDetailPage() {
   const isAdmin = currentUser?.role === 'admin';
 
   const handleReassign = async () => {
-    if (!currentUser) return toast('请先配置用户');
+    if (!currentUser) { toast.error('请先配置用户'); return; }
     const newApprover = prompt('输入新的审批人 ID（如: l1_app1 / l2_app1）：');
     if (!newApprover) return;
     const newName = prompt('输入新的审批人名称：');

@@ -98,8 +98,8 @@ export default function ScanPage() {
   const handleScan = async () => {
     const firstWaybill = selectedWaybill?._allWaybills?.[0];
     const actualId = firstWaybill?.id || v2OrderId;
-    if (!actualId || !selectedSku || !actualQty) return toast('请填写完整扫描信息');
-    if (!currentUser) return toast('请先配置用户');
+    if (!actualId || !selectedSku || !actualQty) { toast.error('请填写完整扫描信息'); return; }
+    if (!currentUser) { toast.error('请先配置用户'); return; }
 
     setScanning(true);
     setResult(null);

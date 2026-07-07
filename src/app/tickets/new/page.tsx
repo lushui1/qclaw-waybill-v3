@@ -41,7 +41,7 @@ export default function NewTicketPage() {
   }, []);
 
   const handleAiClassify = async () => {
-    if (!description.trim()) return toast('请先填写异常描述');
+    if (!description.trim()) toast.error('请先填写异常描述');
     setAiLoading(true);
     try {
       const suggestion = await getTopSuggestion(description);
@@ -75,8 +75,8 @@ export default function NewTicketPage() {
   };
 
   const handleSubmit = async () => {
-    if (!waybillCode.trim() || !description.trim()) return toast('请填写运单号和异常描述');
-    if (!currentUser) return toast('请先选择用户');
+    if (!waybillCode.trim() || !description.trim()) { toast.error('请填写运单号和异常描述'); return; }
+    if (!currentUser) { toast.error('请先选择用户'); return; }
 
     setSubmitting(true);
     try {
@@ -84,7 +84,7 @@ export default function NewTicketPage() {
       const wbRes = await fetch(`/api/waybills?keyword=${encodeURIComponent(waybillCode)}&pageSize=1`);
       const wbData = await wbRes.json();
       const waybill = wbData.waybills?.[0];
-      if (!waybill) return toast('运单不存在，请先同步数据');
+      if (!waybill) { toast.error('运单不存在，请先同步数据'); setSubmitting(false); return; }
 
       // 创建工单
       const res = await fetch('/api/tickets', {
