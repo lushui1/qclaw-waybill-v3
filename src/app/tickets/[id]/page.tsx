@@ -31,6 +31,9 @@ export default function TicketDetailPage() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [aiSuggestion, setAiSuggestion] = useState<{ suggestion: string; reason: string; basedOn: number; fromLlm: boolean } | null>(null);
 
+  // 是否展示审批操作区（审批成功后收起）
+  const [showApproval, setShowApproval] = useState(true);
+
   // 异步获取 AI 审批建议
   useEffect(() => {
     if (ticket) {
@@ -41,6 +44,13 @@ export default function TicketDetailPage() {
       ).then(setAiSuggestion).catch(() => {});
     }
   }, [ticket]);
+
+  // 审批成功后自动收起操作区
+  const refreshAfterAction = () => {
+    fetchTicket();
+    setShowApproval(false);
+    setTimeout(() => setShowApproval(true), 500);
+  };
 
   const fetchTicket = () => {
     fetch(`/api/tickets?searchId=${ticketId}`).then(r => r.json()).then(data => {
@@ -86,7 +96,7 @@ export default function TicketDetailPage() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      fetchTicket();
+      refreshAfterAction();
       setComment(''); setAmount('');
       toast.success('✅ 审批通过');
     } catch (err: any) { toast.error(err.message); }
@@ -108,7 +118,7 @@ export default function TicketDetailPage() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      fetchTicket();
+      refreshAfterAction();
       setComment('');
       toast.success('✅ 已拒绝');
     } catch (err: any) { toast.error(err.message); }
@@ -140,7 +150,7 @@ export default function TicketDetailPage() {
   if (!ticket) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--error)' }}>工单不存在</div>;
 
   const canApprove = currentUser && ['pending_approval', 'level1_approving', 'level2_approving'].includes(ticket.status);
-  const canOperate = canApprove && (
+  const canOperate = canApprove && showApproval && (
     currentUser.role === 'admin' ||
     (ticket.currentLevel === 1 && ['level1_approver', 'admin'].includes(currentUser.role)) ||
     (ticket.currentLevel === 2 && ['level2_approver', 'admin'].includes(currentUser.role))

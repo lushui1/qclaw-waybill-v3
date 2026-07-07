@@ -86,8 +86,25 @@ export async function POST(req: NextRequest) {
     }
 
     if (!skuVerified) {
+      // 最后尝试：直接查 V2 的 orders 表（同数据库），用 externalCode 找 SKU
+      try {
+        const directHit = await prisma.$queryRawUnsafe<Array<Record<string, any>>>(
+          `SELECT id FROM orders WHERE external_code = $1 AND sku_code = $2 LIMIT 1`,
+          waybill.externalCode, skuCode
+        );
+        if (directHit.length > 0) {
+          // 用找到的 id 去 V2 API 正式校验
+          const finalCheck = await verifySkuBelongsToWaybill(String(directHit[0].id), skuCode);
+          if (finalCheck.success && finalCheck.data?.exists) {
+            skuVerified = true;
+          }
+        }
+      } catch {}
+    }
+
+    if (!skuVerified) {
       return NextResponse.json({
-        error: `SKU "${skuCode}" 不属于该运单（已校验 ${candidateIds.length} 个关联运单）`,
+        error: `SKU "${skuCode}" 不属于该运单（已校验 ${candidateIds.length} 个关联运单 + 直查 orders 表）`,
         detail: lastSkuError,
       }, { status: 400 });
     }
