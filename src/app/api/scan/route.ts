@@ -86,21 +86,24 @@ export async function POST(req: NextRequest) {
     }
 
     if (!skuVerified) {
-      // 最后尝试：直查 orders 表（通过 Prisma $queryRawUnsafe）
+      // 最后尝试：调 V2 列表接口搜索该运单+SKU
       try {
-        const query = `SELECT id, sku_code FROM orders WHERE external_code = '${waybill.externalCode?.replace(/'/g, "''")}' AND sku_code = '${skuCode.replace(/'/g, "''")}' LIMIT 1`;
-        const directHit = await prisma.$queryRawUnsafe(query);
-        const rows = directHit as any[];
-        if (rows.length > 0) {
-          const foundId = String(rows[0].id);
-          const finalCheck = await verifySkuBelongsToWaybill(foundId, skuCode);
-          if (finalCheck.success && finalCheck.data?.exists) {
-            skuVerified = true;
+        const searchRes = await fetch(
+          `${process.env.V2_API_BASE_URL || 'https://ideakaoshi.vercel.app'}/api/v2/orders?pageSize=100`,
+          { headers: { 'x-api-key': process.env.V2_API_KEY || 'dev-key' } }
+        );
+        const searchData = await searchRes.json();
+        if (searchData.orders) {
+          // 在返回的 orders 中找匹配 externalCode + skuCode 的
+          const match = searchData.orders.find(
+            (o: any) => o.externalCode === waybill.externalCode && o.skuCode === skuCode
+          );
+          if (match) {
+            const finalCheck = await verifySkuBelongsToWaybill(match.id, skuCode);
+            if (finalCheck.success && finalCheck.data?.exists) skuVerified = true;
           }
         }
-      } catch (e: any) {
-        console.error('[Scan] 直查orders表失败:', e.message);
-      }
+      } catch {}
     }
 
     if (!skuVerified) {
